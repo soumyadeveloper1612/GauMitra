@@ -18,7 +18,7 @@ class AdminAuthController extends Controller
         return view('admin.auth.login');
     }
 
-    public function login(Request $request)
+ public function login(Request $request)
     {
         $request->validate([
             'user_id' => 'required|string',
@@ -29,7 +29,7 @@ class AdminAuthController extends Controller
         ]);
 
         $admin = AdminUser::where('user_id', $request->user_id)
-            ->where('status', 1)
+            ->where('status', 'active')
             ->first();
 
         if (!$admin) {
@@ -56,6 +56,7 @@ class AdminAuthController extends Controller
             ->route('admin.dashboard')
             ->with('success', 'Login successful');
     }
+
 
     public function logout(Request $request)
     {
