@@ -1,20 +1,16 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\Auth\OtpAuthController;
+use App\Http\Controllers\Api\MobileAuthController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-
-
-Route::prefix('auth')->group(function () {
-    Route::post('/send-otp', [OtpAuthController::class, 'sendOtp']);
-    Route::post('/verify-otp', [OtpAuthController::class, 'verifyOtp']);
+Route::prefix('mobile-auth')->group(function () {
+    Route::post('/send-otp', [MobileAuthController::class, 'sendOtp']);
+    Route::post('/verify-otp', [MobileAuthController::class, 'verifyOtp']);
+    Route::post('/password-login', [MobileAuthController::class, 'passwordLogin']);
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/me', [OtpAuthController::class, 'me']);
-        Route::post('/logout', [OtpAuthController::class, 'logout']);
+        Route::get('/me', [MobileAuthController::class, 'me']);
+        Route::post('/set-password', [MobileAuthController::class, 'setPassword']);
+        Route::post('/logout', [MobileAuthController::class, 'logout']);
     });
 });
