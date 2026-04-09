@@ -1,18 +1,60 @@
-<x-app-layout>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            Admin Dashboard
-        </h2>
-    </x-slot>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - GauMitra</title>
+    <style>
+        body{
+            margin:0;
+            font-family:Arial, sans-serif;
+            background:#f8fafc;
+        }
+        .header{
+            background:#ea580c;
+            color:#fff;
+            padding:18px 30px;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+        }
+        .container{
+            padding:30px;
+        }
+        .card{
+            background:#fff;
+            border-radius:16px;
+            padding:25px;
+            box-shadow:0 8px 20px rgba(0,0,0,0.08);
+        }
+        .logout-btn{
+            background:#fff;
+            color:#ea580c;
+            border:none;
+            padding:10px 16px;
+            border-radius:8px;
+            font-weight:700;
+            cursor:pointer;
+        }
+    </style>
+</head>
+<body>
 
-    <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white shadow rounded p-6">
-                <h3 class="text-lg font-bold mb-4">Welcome Admin</h3>
-                <p><strong>Name:</strong> {{ auth()->user()->name }}</p>
-                <p><strong>Email:</strong> {{ auth()->user()->email }}</p>
-                <p><strong>Role:</strong> {{ auth()->user()->role }}</p>
-            </div>
+    <div class="header">
+        <h2>GauMitra Admin Dashboard</h2>
+        <form method="POST" action="{{ route('admin.logout') }}">
+            @csrf
+            <button type="submit" class="logout-btn">Logout</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h3>Welcome, {{ session('admin_name') }}</h3>
+            <p>User ID: {{ session('admin_user_id') }}</p>
+            <p>Admin panel login successful.</p>
         </div>
     </div>
-</x-app-layout>
+
+</body>
+</html>
