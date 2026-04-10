@@ -47,7 +47,7 @@ class MobileAuthController extends Controller
 
         $otp = (string) random_int(100000, 999999);
 
-        $otpRow = LoginOtp::create([
+        LoginOtp::create([
             'user_id' => $user->id,
             'mobile' => $request->mobile,
             'purpose' => 'login',
@@ -57,17 +57,12 @@ class MobileAuthController extends Controller
             'user_agent' => $request->userAgent(),
         ]);
 
-        // SMS gateway integration here
-        // Example: MSG91 / Twilio / Fast2SMS
-        // send SMS to $request->mobile with $otp
-
         $response = [
             'status' => true,
             'message' => 'OTP sent successfully.',
             'expires_in_seconds' => 300,
         ];
 
-        // Only for local/testing
         if (app()->environment('local')) {
             $response['otp'] = $otp;
         }

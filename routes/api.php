@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\MobileAuthController;
+use App\Http\Controllers\Api\Auth\MobileAuthController;
 
 Route::prefix('mobile-auth')->group(function () {
     Route::post('/send-otp', [MobileAuthController::class, 'sendOtp']);
