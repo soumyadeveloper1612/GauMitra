@@ -86,6 +86,15 @@
         .login-box {
             width: 100%;
             max-width: 380px;
+            text-align: center;
+        }
+
+        .login-logo {
+            width: 120px;
+            height: auto;
+            margin: 0 auto 18px;
+            display: block;
+            object-fit: contain;
         }
 
         .login-box h2 {
@@ -102,6 +111,7 @@
 
         .form-group {
             margin-bottom: 18px;
+            text-align: left;
         }
 
         label {
@@ -177,6 +187,10 @@
             .login-right {
                 padding: 40px 24px;
             }
+
+            .login-logo {
+                width: 100px;
+            }
         }
     </style>
 </head>
@@ -194,6 +208,9 @@
 
         <div class="login-right">
             <div class="login-box">
+
+                <img src="{{ asset('image/logo.png') }}" alt="GauMitra Logo" class="login-logo">
+
                 <h2>Admin Login</h2>
                 <p class="subtitle">Enter your credentials to access the dashboard</p>
 
