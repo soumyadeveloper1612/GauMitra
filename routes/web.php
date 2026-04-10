@@ -7,24 +7,20 @@ use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
 
 Route::get('/', function () {
     return view('welcome');
-})->name('home');
-
-Route::prefix('admin')->group(function () {
-
-    // Login page only for guest
-    Route::middleware('guest')->group(function () {
-        Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('admin.login');
-        Route::post('/login', [AdminAuthController::class, 'login'])->name('admin.login.submit');
-    });
-
-    // Protected routes
-    Route::middleware('auth')->group(function () {
-        Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
-        Route::get('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
-    });
 });
 
-Route::middleware(['auth', 'role:superadmin'])->prefix('superadmin')->group(function () {
-    Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])
+Route::get('/login', function () {
+    return redirect()->route('admin.login');
+})->name('login');
+
+Route::get('/admin/login', [AdminAuthController::class, 'showLogin'])->name('admin.login');
+Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.submit');
+Route::get('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+
+Route::middleware(['admin.auth'])->group(function () {
+    Route::get('/admin/dashboard', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
+
+    Route::get('/superadmin/dashboard', [SuperAdminDashboardController::class, 'index'])
+        ->middleware('role:superadmin')
         ->name('superadmin.dashboard');
 });
