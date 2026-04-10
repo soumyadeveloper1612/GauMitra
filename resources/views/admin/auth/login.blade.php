@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,7 +25,7 @@
             align-items: center;
             justify-content: center;
             background:
-                linear-gradient(135deg, rgba(234,88,12,0.92), rgba(251,146,60,0.88)),
+                linear-gradient(135deg, rgba(234, 88, 12, 0.92), rgba(251, 146, 60, 0.88)),
                 url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80') center/cover no-repeat;
             padding: 20px;
         }
@@ -34,11 +35,11 @@
             max-width: 980px;
             display: grid;
             grid-template-columns: 1fr 1fr;
-            background: rgba(255,255,255,0.14);
+            background: rgba(255, 255, 255, 0.14);
             backdrop-filter: blur(16px);
             border-radius: 24px;
             overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
         }
 
         .login-left {
@@ -47,7 +48,7 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.28));
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.28));
         }
 
         .login-left h1 {
@@ -66,8 +67,8 @@
         .login-left .badge {
             display: inline-block;
             padding: 10px 16px;
-            background: rgba(255,255,255,0.16);
-            border: 1px solid rgba(255,255,255,0.22);
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.22);
             border-radius: 999px;
             margin-bottom: 22px;
             font-size: 13px;
@@ -86,15 +87,6 @@
         .login-box {
             width: 100%;
             max-width: 380px;
-            text-align: center;
-        }
-
-        .login-logo {
-            width: 120px;
-            height: auto;
-            margin: 0 auto 18px;
-            display: block;
-            object-fit: contain;
         }
 
         .login-box h2 {
@@ -111,7 +103,6 @@
 
         .form-group {
             margin-bottom: 18px;
-            text-align: left;
         }
 
         label {
@@ -140,7 +131,7 @@
         input:focus {
             border-color: #ea580c;
             background: #fff;
-            box-shadow: 0 0 0 4px rgba(234,88,12,0.12);
+            box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.12);
         }
 
         .btn {
@@ -154,12 +145,12 @@
             border-radius: 14px;
             cursor: pointer;
             transition: 0.3s ease;
-            box-shadow: 0 10px 25px rgba(234,88,12,0.28);
+            box-shadow: 0 10px 25px rgba(234, 88, 12, 0.28);
         }
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 14px 30px rgba(234,88,12,0.35);
+            box-shadow: 0 14px 30px rgba(234, 88, 12, 0.35);
         }
 
         .error-text {
@@ -175,6 +166,22 @@
             font-size: 13px;
         }
 
+        .logo-box {
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.login-logo {
+    width: 90px;
+    height: 90px;
+    object-fit: contain;
+    border-radius: 50%;
+    background: #fff7ed;
+    padding: 10px;
+    box-shadow: 0 8px 20px rgba(234, 88, 12, 0.15);
+    border: 1px solid #fed7aa;
+}
+
         @media(max-width: 900px) {
             .login-wrapper {
                 grid-template-columns: 1fr;
@@ -187,13 +194,10 @@
             .login-right {
                 padding: 40px 24px;
             }
-
-            .login-logo {
-                width: 100px;
-            }
         }
     </style>
 </head>
+
 <body>
 
     <div class="login-wrapper">
@@ -208,9 +212,9 @@
 
         <div class="login-right">
             <div class="login-box">
-
-                <img src="{{ asset('image/logo.png') }}" alt="GauMitra Logo" class="login-logo">
-
+                <div class="logo-box">
+                    <img src="{{ asset('image/logo.png') }}" alt="GauMitra Logo" class="login-logo">
+                </div>
                 <h2>Admin Login</h2>
                 <p class="subtitle">Enter your credentials to access the dashboard</p>
 
@@ -220,7 +224,8 @@
                     <div class="form-group">
                         <label>User ID</label>
                         <div class="input-box">
-                            <input type="text" name="user_id" value="{{ old('user_id') }}" placeholder="Enter your user ID">
+                            <input type="text" name="user_id" value="{{ old('user_id') }}"
+                                placeholder="Enter your user ID">
                         </div>
                         @error('user_id')
                             <div class="error-text">{{ $message }}</div>
@@ -247,7 +252,7 @@
         </div>
     </div>
 
-    @if(session('error'))
+    @if (session('error'))
         <script>
             Swal.fire({
                 icon: 'error',
@@ -258,7 +263,7 @@
         </script>
     @endif
 
-    @if($errors->any())
+    @if ($errors->any())
         <script>
             Swal.fire({
                 icon: 'warning',
@@ -269,7 +274,7 @@
         </script>
     @endif
 
-    @if(session('success'))
+    @if (session('success'))
         <script>
             Swal.fire({
                 icon: 'success',
@@ -281,4 +286,5 @@
     @endif
 
 </body>
+
 </html>
