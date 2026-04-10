@@ -12,6 +12,7 @@ class LoginOtp extends Model
     protected $fillable = [
         'user_id',
         'mobile',
+        'otp',
         'purpose',
         'otp_hash',
         'expires_at',
@@ -32,4 +33,5 @@ class LoginOtp extends Model
     {
         return $this->belongsTo(User::class);
     }
+
 }
