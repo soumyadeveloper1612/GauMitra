@@ -7,6 +7,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\UserAddress;
+use App\Models\LoginOtp;
 
 class User extends Authenticatable
 {
@@ -28,8 +29,8 @@ class User extends Authenticatable
 
     protected $casts = [
         'mobile_verified_at' => 'datetime',
-        'last_login_at' => 'datetime',
-        'password' => 'hashed',
+        'last_login_at'      => 'datetime',
+        'password'           => 'hashed',
     ];
 
     public function loginOtps()
