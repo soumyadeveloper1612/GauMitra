@@ -78,9 +78,7 @@ class AuthController extends Controller
                     'mobile'                => $request->mobile,
                     'otp'                   => $otp,
                     'expires_at'            => $loginOtp->expires_at,
-                    'user_exists'           => !$isNewUser,
                     'is_new_user'           => $isNewUser,
-                    'name_required_on_verify' => $isNewUser,
                 ],
             ]);
         } catch (\Exception $e) {
