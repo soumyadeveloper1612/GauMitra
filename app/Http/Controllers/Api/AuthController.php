@@ -91,18 +91,20 @@ class AuthController extends Controller
             ], 500);
         }
     }
-
 public function verifyOtp(Request $request)
 {
     try {
         $validator = Validator::make($request->all(), [
             'mobile' => 'required|digits:10',
             'otp'    => 'required|digits:4',
+            'name'   => 'nullable|string|max:255',
         ], [
             'mobile.required' => 'Mobile number is required',
             'mobile.digits'   => 'Mobile number must be 10 digits',
             'otp.required'    => 'OTP is required',
             'otp.digits'      => 'OTP must be 4 digits',
+            'name.string'     => 'Name must be a string',
+            'name.max'        => 'Name may not be greater than 255 characters',
         ]);
 
         if ($validator->fails()) {
@@ -147,6 +149,7 @@ public function verifyOtp(Request $request)
         // New user flow
         if (!$user) {
             $user = User::create([
+                'name'               => $request->filled('name') ? $request->name : null,
                 'mobile'             => $request->mobile,
                 'status'             => 'active',
                 'mobile_verified_at' => now(),
@@ -156,16 +159,21 @@ public function verifyOtp(Request $request)
             $isNewUser = true;
             $message = 'New user registered and login successful';
         } else {
-            // Old user flow
-            $user->update([
+            $updateData = [
                 'mobile_verified_at' => now(),
                 'last_login_at'      => now(),
-            ]);
+            ];
+
+            // Optional: update name for old user if sent and current name is empty
+            if ($request->filled('name') && empty($user->name)) {
+                $updateData['name'] = $request->name;
+            }
+
+            $user->update($updateData);
 
             $message = 'Login successful';
         }
 
-        // Mark OTP used and attach user_id if it was null
         $loginOtp->update([
             'user_id'     => $user->id,
             'is_used'     => 1,
@@ -180,7 +188,7 @@ public function verifyOtp(Request $request)
             'is_new_user' => $isNewUser,
             'token'       => $token,
             'token_type'  => 'Bearer',
-            'user'        => $user,
+            'user'        => $user->fresh(),
         ]);
     } catch (\Exception $e) {
         return response()->json([
@@ -192,7 +200,6 @@ public function verifyOtp(Request $request)
         ], 500);
     }
 }
-
     public function logout(Request $request)
     {
         try {
