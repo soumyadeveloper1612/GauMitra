@@ -7,74 +7,87 @@ use App\Models\UserAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class UserAddressController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth:sanctum')->only(['store']);
-    }
-
     public function store(Request $request)
     {
-        $user = Auth::guard('sanctum')->user();
+        try {
+            $user = Auth::guard('sanctum')->user();
 
-        if (!$user) {
+            if (!$user) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'full_address'     => 'required|string',
+                'street'           => 'nullable|string|max:255',
+                'village'          => 'nullable|string|max:150',
+                'police_station'   => 'nullable|string|max:150',
+                'city'             => 'nullable|string|max:150',
+                'district'         => 'nullable|string|max:150',
+                'state'            => 'nullable|string|max:150',
+                'pincode'          => 'nullable|string|max:20',
+                'area_name'        => 'nullable|string|max:150',
+                'latitude'         => 'required|numeric|between:-90,90',
+                'longitude'        => 'required|numeric|between:-180,180',
+                'google_place_id'  => 'nullable|string|max:255',
+                'plus_code'        => 'nullable|string|max:100',
+            ], [
+                'full_address.required' => 'Full address is required.',
+                'latitude.required'     => 'Latitude is required.',
+                'longitude.required'    => 'Longitude is required.',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Validation error.',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            $address = UserAddress::create([
+                'user_id'         => $user->id,
+                'full_address'    => $request->full_address,
+                'street'          => $request->street,
+                'village'         => $request->village,
+                'police_station'  => $request->police_station,
+                'city'            => $request->city,
+                'district'        => $request->district,
+                'state'           => $request->state,
+                'pincode'         => $request->pincode,
+                'area_name'       => $request->area_name,
+                'latitude'        => $request->latitude,
+                'longitude'       => $request->longitude,
+                'google_place_id' => $request->google_place_id,
+                'plus_code'       => $request->plus_code,
+            ]);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Address saved successfully.',
+                'data'    => $address,
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Save user address error', [
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ]);
+
             return response()->json([
                 'status'  => false,
-                'message' => 'Unauthenticated.',
-            ], 401);
+                'message' => 'Server error',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ], 500);
         }
-
-        $validator = Validator::make($request->all(), [
-            'full_address'     => 'required|string',
-            'street'           => 'nullable|string|max:255',
-            'village'          => 'nullable|string|max:150',
-            'police_station'   => 'nullable|string|max:150',
-            'city'             => 'nullable|string|max:150',
-            'district'         => 'nullable|string|max:150',
-            'state'            => 'nullable|string|max:150',
-            'pincode'          => 'nullable|string|max:20',
-            'area_name'        => 'nullable|string|max:150',
-            'latitude'         => 'required|numeric|between:-90,90',
-            'longitude'        => 'required|numeric|between:-180,180',
-            'google_place_id'  => 'nullable|string|max:255',
-            'plus_code'        => 'nullable|string|max:100',
-        ], [
-            'full_address.required' => 'Full address is required.',
-            'latitude.required'     => 'Latitude is required.',
-            'longitude.required'    => 'Longitude is required.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Validation error.',
-                'errors'  => $validator->errors(),
-            ], 422);
-        }
-
-        $address = UserAddress::create([
-            'user_id'         => $user->id,
-            'full_address'    => $request->full_address,
-            'street'          => $request->street,
-            'village'         => $request->village,
-            'police_station'  => $request->police_station,
-            'city'            => $request->city,
-            'district'        => $request->district,
-            'state'           => $request->state,
-            'pincode'         => $request->pincode,
-            'area_name'       => $request->area_name,
-            'latitude'        => $request->latitude,
-            'longitude'       => $request->longitude,
-            'google_place_id' => $request->google_place_id,
-            'plus_code'       => $request->plus_code,
-        ]);
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'Address saved successfully.',
-            'data'    => $address,
-        ], 201);
     }
 }
