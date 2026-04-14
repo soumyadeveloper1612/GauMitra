@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\GaushalaController;
+use App\Http\Controllers\Admin\AdminReportCaseController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -33,6 +34,12 @@ Route::middleware(['admin.auth'])->prefix('admin')->name('admin.')->group(functi
     Route::post('/gaushalas/store', [GaushalaController::class, 'store'])->name('gaushalas.store');
     Route::get('/gaushalas/{id}', [GaushalaController::class, 'show'])->name('gaushalas.show');
 });
+
+ Route::prefix('report-cases')->name('report-cases.')->group(function () {
+            Route::get('/', [AdminReportCaseController::class, 'index'])->name('index');
+            Route::get('/{id}', [AdminReportCaseController::class, 'show'])->name('show');
+            Route::post('/{id}/status', [AdminReportCaseController::class, 'updateStatus'])->name('update-status');
+        });
 
 Route::middleware(['admin.auth', 'role:superadmin'])->get('/superadmin/dashboard', [SuperAdminDashboardController::class, 'index'])
     ->name('superadmin.dashboard');
