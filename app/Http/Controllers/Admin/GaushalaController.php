@@ -16,7 +16,7 @@ class GaushalaController extends Controller
 
     public function create()
     {
-        return view('admin.gaushalas.create');
+        return view('admin.gaushalas.create-gaushala');
     }
 
     public function store(Request $request)
@@ -58,7 +58,7 @@ class GaushalaController extends Controller
         ]);
 
         return redirect()
-            ->route('admin.gaushalas.index')
+            ->route('admin.gaushalas.manage-gaushala')
             ->with('success', 'Gaushala registered successfully.');
     }
 
