@@ -12,6 +12,7 @@
     <div class="nav-title">Main Menu</div>
 
     <ul>
+        
         <li>
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
                 <i class="bi bi-grid-fill"></i>
@@ -24,6 +25,15 @@
                 class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
                 <i class="bi bi-people-fill"></i>
                 <span>Users</span>
+            </a>
+        </li>
+
+
+        <li>
+            <a href="{{ route('admin.gaushalas.index') }}"
+                class="{{ request()->routeIs('admin.gaushalas.*') ? 'active' : '' }}">
+                <i class="bi bi-house-heart-fill"></i>
+                <span>Gaushalas</span>
             </a>
         </li>
 
