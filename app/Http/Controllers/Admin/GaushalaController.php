@@ -11,7 +11,8 @@ class GaushalaController extends Controller
     public function index()
     {
         $gaushalas = Gaushala::latest()->paginate(10);
-        return view('admin.gaushalas.index', compact('gaushalas'));
+
+        return view('admin.gaushalas.manage-gaushala', compact('gaushalas'));
     }
 
     public function create()
@@ -58,13 +59,14 @@ class GaushalaController extends Controller
         ]);
 
         return redirect()
-            ->route('admin.gaushalas.manage-gaushala')
+            ->route('admin.gaushalas.index')
             ->with('success', 'Gaushala registered successfully.');
     }
 
     public function show($id)
     {
         $gaushala = Gaushala::findOrFail($id);
+
         return view('admin.gaushalas.show', compact('gaushala'));
     }
 }
