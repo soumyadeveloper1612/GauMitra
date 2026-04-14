@@ -17,8 +17,27 @@ class Gaushala extends Model
         'full_address',
         'district',
         'state',
+        'total_capacity',
+        'available_capacity',
+        'rescue_vehicle',
+        'doctor',
+        'food_support',
+        'temporary_shelter',
+        'gaushala_photo',
+        'registration_proof',
+        'working_hours',
+        'emergency_availability',
         'latitude',
         'longitude',
         'status',
+    ];
+
+    protected $casts = [
+        'rescue_vehicle'    => 'boolean',
+        'doctor'            => 'boolean',
+        'food_support'      => 'boolean',
+        'temporary_shelter' => 'boolean',
+        'latitude'          => 'decimal:7',
+        'longitude'         => 'decimal:7',
     ];
 }

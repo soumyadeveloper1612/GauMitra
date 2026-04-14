@@ -5,7 +5,7 @@
     <div class="gaushala-page-header mb-4">
         <div>
             <h2 class="mb-1">Gaushala Registration</h2>
-            <p class="mb-0">Register new gaushala details with address and GPS location.</p>
+            <p class="mb-0">Register gaushala details, services, capacity, documents and GPS location.</p>
         </div>
         <a href="{{ route('admin.gaushalas.index') }}" class="btn btn-light header-btn">
             <i class="bi bi-list-ul me-2"></i>View All
@@ -37,7 +37,7 @@
         </div>
 
         <div class="card-body p-4">
-            <form action="{{ route('admin.gaushalas.store') }}" method="POST">
+            <form action="{{ route('admin.gaushalas.store') }}" method="POST" enctype="multipart/form-data">
                 @csrf
 
                 <div class="row g-4">
@@ -74,6 +74,69 @@
                     <div class="col-md-6">
                         <label class="form-label">State <span class="text-danger">*</span></label>
                         <input type="text" name="state" class="form-control custom-input" value="{{ old('state') }}" placeholder="Enter state">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Total Capacity <span class="text-danger">*</span></label>
+                        <input type="number" name="total_capacity" min="0" class="form-control custom-input" value="{{ old('total_capacity') }}" placeholder="Enter total capacity">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Available Capacity <span class="text-danger">*</span></label>
+                        <input type="number" name="available_capacity" min="0" class="form-control custom-input" value="{{ old('available_capacity') }}" placeholder="Enter available capacity">
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label d-block">Services Available</label>
+                        <div class="service-grid">
+                            <label class="service-card">
+                                <input type="hidden" name="rescue_vehicle" value="0">
+                                <input type="checkbox" name="rescue_vehicle" value="1" {{ old('rescue_vehicle') ? 'checked' : '' }}>
+                                <span>Rescue Vehicle</span>
+                            </label>
+
+                            <label class="service-card">
+                                <input type="hidden" name="doctor" value="0">
+                                <input type="checkbox" name="doctor" value="1" {{ old('doctor') ? 'checked' : '' }}>
+                                <span>Doctor</span>
+                            </label>
+
+                            <label class="service-card">
+                                <input type="hidden" name="food_support" value="0">
+                                <input type="checkbox" name="food_support" value="1" {{ old('food_support') ? 'checked' : '' }}>
+                                <span>Food Support</span>
+                            </label>
+
+                            <label class="service-card">
+                                <input type="hidden" name="temporary_shelter" value="0">
+                                <input type="checkbox" name="temporary_shelter" value="1" {{ old('temporary_shelter') ? 'checked' : '' }}>
+                                <span>Temporary Shelter</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Gaushala Photo</label>
+                        <input type="file" name="gaushala_photo" class="form-control custom-input file-input" accept=".jpg,.jpeg,.png,.webp">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Registration Proof / ID</label>
+                        <input type="file" name="registration_proof" class="form-control custom-input file-input" accept=".jpg,.jpeg,.png,.pdf">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Working Hours</label>
+                        <input type="text" name="working_hours" class="form-control custom-input" value="{{ old('working_hours') }}" placeholder="Example: 6:00 AM - 8:00 PM">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Emergency Availability <span class="text-danger">*</span></label>
+                        <select name="emergency_availability" class="form-select custom-input">
+                            <option value="">Select Emergency Availability</option>
+                            <option value="yes" {{ old('emergency_availability') == 'yes' ? 'selected' : '' }}>Yes</option>
+                            <option value="no" {{ old('emergency_availability') == 'no' ? 'selected' : '' }}>No</option>
+                        </select>
                     </div>
 
                     <div class="col-md-4">
@@ -183,6 +246,10 @@
         height: auto;
     }
 
+    .file-input {
+        padding-top: 10px;
+    }
+
     .custom-input:focus {
         border-color: #ff7a00;
         box-shadow: 0 0 0 0.15rem rgba(255, 122, 0, 0.12) !important;
@@ -192,6 +259,29 @@
         font-weight: 600;
         margin-bottom: 8px;
         color: #1f2937;
+    }
+
+    .service-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+    }
+
+    .service-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #fff;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .service-card input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
     }
 
     .location-box {
