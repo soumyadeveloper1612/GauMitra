@@ -249,14 +249,14 @@
         }
     </style>
 
-    <div class="hero-panel">
+    {{-- <div class="hero-panel">
         <span class="quick-pill"><i class="bi bi-activity"></i> Live Emergency Command Center</span>
         <h2>Hello, {{ session('admin_name', 'Admin') }} 👋</h2>
         <p>
             Monitor users, admin activity, OTP records, emergency reports, rescue progress,
             and case resolution from one intelligent dashboard.
         </p>
-    </div>
+    </div> --}}
 
     <div class="row g-4 mb-4">
         <div class="col-md-6 col-xl-3">
