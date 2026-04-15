@@ -1,62 +1,126 @@
+@php
+    $reportMenuOpen = request()->routeIs('admin.report-cases.*');
+    $adminMenuOpen = request()->routeIs('admin.admins.*') || request()->routeIs('admin.roles.*');
+@endphp
+
 <aside class="sidebar" id="sidebar">
-    <div class="brand-box">
-        <div class="brand-icon">
-            <i class="bi bi-shield-check"></i>
-        </div>
-        <div class="brand-text">
-            <h4>GauMitra</h4>
-            <p>Admin Control Panel</p>
+    <div class="sidebar-top">
+        <div class="brand-box">
+            <div class="brand-icon">
+                <i class="bi bi-shield-check"></i>
+            </div>
+            <div class="brand-text">
+                <h4>GauMitra</h4>
+                <p>Admin Control Panel</p>
+            </div>
         </div>
     </div>
 
-    <div class="nav-title">Main Menu</div>
+    <div class="sidebar-scroll">
+        <div class="nav-title">Main Menu</div>
 
-    <ul>
-        <li>
-            <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
-                <i class="bi bi-grid-fill"></i>
-                <span>Dashboard</span>
-            </a>
-        </li>
+        <ul class="sidebar-menu">
+            <li class="menu-item">
+                <a href="{{ route('admin.dashboard') }}"
+                   class="menu-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
+                    <span class="nav-icon"><i class="bi bi-grid-fill"></i></span>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+            </li>
 
-        <li>
-            <a href="{{ route('admin.users.index') }}"
-                class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
-                <i class="bi bi-people-fill"></i>
-                <span>Users</span>
-            </a>
-        </li>
+            <li class="menu-item">
+                <a href="{{ route('admin.users.index') }}"
+                   class="menu-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
+                    <span class="nav-icon"><i class="bi bi-people-fill"></i></span>
+                    <span class="nav-text">Users</span>
+                </a>
+            </li>
 
-        <li>
-            <a href="javascript:void(0)">
-                <i class="bi bi-clipboard-data-fill"></i>
-                <span>Reports</span>
-            </a>
-        </li>
+            <li class="menu-item has-submenu {{ $reportMenuOpen ? 'open' : '' }}">
+                <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $reportMenuOpen ? 'active' : '' }}">
+                    <span class="nav-icon"><i class="bi bi-clipboard-data-fill"></i></span>
+                    <span class="nav-text">Reports</span>
+                    <span class="nav-badge">Live</span>
+                    <span class="submenu-arrow"><i class="bi bi-chevron-down"></i></span>
+                </a>
 
-        <li>
-            <a href="javascript:void(0)">
-                <i class="bi bi-shield-lock-fill"></i>
-                <span>Admin Management</span>
-            </a>
-        </li>
+                <ul class="submenu" style="{{ $reportMenuOpen ? 'display:block;' : 'display:none;' }}">
+                    <li>
+                        <a href="{{ route('admin.report-cases.index') }}"
+                           class="{{ request()->routeIs('admin.report-cases.*') ? 'active' : '' }}">
+                            <span class="submenu-dot"></span>
+                            <span>Report Cases</span>
+                        </a>
+                    </li>
 
-        <li>
-            <a href="javascript:void(0)">
-                <i class="bi bi-gear-fill"></i>
-                <span>Settings</span>
-            </a>
-        </li>
-    </ul>
+                    <li>
+                        <a href="javascript:void(0)">
+                            <span class="submenu-dot"></span>
+                            <span>Emergency Alerts</span>
+                        </a>
+                    </li>
 
-    <div class="nav-title">System</div>
+                    <li>
+                        <a href="javascript:void(0)">
+                            <span class="submenu-dot"></span>
+                            <span>Case Tracking</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
 
-    <ul>
-        <li>
-            <a href="{{ route('admin.logout') }}">
-                <i class="bi bi-box-arrow-right"></i>
-                <span>Logout</span>
-            </a>
-        </li>
-    </ul>
+            <li class="menu-item has-submenu {{ $adminMenuOpen ? 'open' : '' }}">
+                <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $adminMenuOpen ? 'active' : '' }}">
+                    <span class="nav-icon"><i class="bi bi-shield-lock-fill"></i></span>
+                    <span class="nav-text">Admin Management</span>
+                    <span class="submenu-arrow"><i class="bi bi-chevron-down"></i></span>
+                </a>
+
+                <ul class="submenu" style="{{ $adminMenuOpen ? 'display:block;' : 'display:none;' }}">
+                    <li>
+                        <a href="javascript:void(0)">
+                            <span class="submenu-dot"></span>
+                            <span>All Admins</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="javascript:void(0)">
+                            <span class="submenu-dot"></span>
+                            <span>Roles & Permissions</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+
+            <li class="menu-item">
+                <a href="javascript:void(0)" class="menu-link">
+                    <span class="nav-icon"><i class="bi bi-gear-fill"></i></span>
+                    <span class="nav-text">Settings</span>
+                </a>
+            </li>
+        </ul>
+
+        <div class="nav-title">System</div>
+
+        <ul class="sidebar-menu">
+            <li class="menu-item">
+                <a href="{{ route('admin.logout') }}" class="menu-link logout-menu">
+                    <span class="nav-icon"><i class="bi bi-box-arrow-right"></i></span>
+                    <span class="nav-text">Logout</span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="sidebar-footer">
+        <div class="sidebar-footer-card">
+            <div class="footer-icon">
+                <i class="bi bi-activity"></i>
+            </div>
+            <div class="footer-text">
+                <h6>System Status</h6>
+                <p>All services operational</p>
+            </div>
+        </div>
+    </div>
 </aside>

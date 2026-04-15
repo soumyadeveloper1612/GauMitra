@@ -12,6 +12,8 @@
     @include('admin.layouts.components.styles')
 </head>
 <body>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <div class="admin-wrapper" id="adminWrapper">
         @include('admin.layouts.components.app-sidebar')
 
