@@ -10,34 +10,36 @@ return new class extends Migration
     {
         Schema::create('emergency_cases', function (Blueprint $table) {
             $table->id();
+
             $table->string('case_uid')->unique();
 
-            $table->foreignId('reporter_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('reporter_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('current_handler_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('parent_case_id')->nullable()->constrained('emergency_cases')->nullOnDelete();
             $table->foreignId('closed_by')->nullable()->constrained('users')->nullOnDelete();
 
-            $table->string('case_type'); // accident, injured_cattle, illegal_transport, abandoned_cattle
+            $table->string('case_type', 50)->index();
             $table->string('title');
             $table->text('description')->nullable();
 
-            $table->string('severity')->default('medium'); // low, medium, high, critical
-            $table->unsignedInteger('cattle_count')->nullable();
+            $table->string('severity', 20)->default('medium')->index();
+            $table->unsignedInteger('cattle_count')->default(1);
 
             $table->string('contact_number', 20)->nullable();
-            $table->string('vehicle_number')->nullable();
+            $table->string('vehicle_number', 50)->nullable();
             $table->text('vehicle_details')->nullable();
 
-            $table->string('full_address')->nullable();
-            $table->string('district')->nullable();
-            $table->string('state')->nullable();
+            $table->text('full_address')->nullable();
+            $table->string('district', 150)->nullable()->index();
+            $table->string('state', 150)->nullable()->index();
             $table->string('pincode', 20)->nullable();
 
-            $table->decimal('latitude', 10, 7);
-            $table->decimal('longitude', 10, 7);
+            $table->decimal('latitude', 10, 7)->nullable()->index();
+            $table->decimal('longitude', 11, 8)->nullable()->index();
 
-            $table->string('status')->default('reported');
+            $table->string('status', 50)->default('reported')->index();
             $table->boolean('is_duplicate')->default(false);
+
             $table->decimal('notified_radius_km', 5, 2)->default(20.00);
             $table->unsignedTinyInteger('escalation_level')->default(0);
 
@@ -54,10 +56,9 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index(['status', 'case_type']);
-            $table->index(['reporter_id']);
-            $table->index(['current_handler_id']);
-            $table->index(['latitude', 'longitude']);
+            $table->index(['status', 'severity']);
+            $table->index(['reporter_id', 'status']);
+            $table->index(['current_handler_id', 'status']);
         });
     }
 

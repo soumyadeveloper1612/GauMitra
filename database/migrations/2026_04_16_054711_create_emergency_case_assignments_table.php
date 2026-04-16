@@ -10,11 +10,13 @@ return new class extends Migration
     {
         Schema::create('emergency_case_assignments', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('emergency_case_id')->constrained('emergency_cases')->cascadeOnDelete();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
 
-            $table->string('assignment_role')->default('support_handler'); // primary_handler, support_handler
-            $table->string('status')->default('invited'); // invited, accepted, rejected, on_the_way, reached, completed, cancelled
+            $table->string('assignment_role', 50)->default('responder');
+            $table->string('status', 50)->default('pending')->index();
+
             $table->decimal('distance_km', 8, 2)->nullable();
 
             $table->timestamp('accepted_at')->nullable();
@@ -27,7 +29,9 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['emergency_case_id', 'user_id']);
+            $table->index(['emergency_case_id', 'status']);
+            $table->index(['user_id', 'status']);
+            $table->unique(['emergency_case_id', 'user_id', 'assignment_role'], 'case_user_role_unique');
         });
     }
 
