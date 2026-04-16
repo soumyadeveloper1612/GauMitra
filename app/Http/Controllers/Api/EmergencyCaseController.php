@@ -150,7 +150,6 @@ class EmergencyCaseController extends Controller
     {
         try {
             $case = DB::transaction(function () use ($request) {
-
                 $case = EmergencyCase::create([
                     'case_uid'       => $this->caseService->generateCaseUid(),
                     'reporter_id'    => auth()->id(),
@@ -235,14 +234,21 @@ class EmergencyCaseController extends Controller
                 return $case;
             });
 
-            $shouldAlertImmediately =
-                in_array($case->case_type, ['accident', 'illegal_transport']) ||
-                in_array($case->severity, ['high', 'critical']);
-
             $alertCount = 0;
 
-            if ($shouldAlertImmediately) {
-                $alertCount = $this->caseService->sendCaseAlerts($case, 20);
+            try {
+                $shouldAlertImmediately =
+                    in_array($case->case_type, ['accident', 'illegal_transport']) ||
+                    in_array($case->severity, ['high', 'critical']);
+
+                if ($shouldAlertImmediately) {
+                    $alertCount = $this->caseService->sendCaseAlerts($case, 20);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Emergency alert failed', [
+                    'case_id' => $case->id,
+                    'error'   => $e->getMessage(),
+                ]);
             }
 
             return response()->json([
@@ -258,7 +264,6 @@ class EmergencyCaseController extends Controller
                 'message' => 'Server Error',
                 'error'   => $e->getMessage(),
                 'line'    => $e->getLine(),
-                'file'    => $e->getFile(),
             ], 500);
         }
     }

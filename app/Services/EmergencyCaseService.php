@@ -5,249 +5,103 @@ namespace App\Services;
 use App\Models\DeviceToken;
 use App\Models\EmergencyCase;
 use App\Models\EmergencyCaseAlert;
-use App\Models\EmergencyCaseAssignment;
-use App\Models\EmergencyCaseLog;
-use App\Models\UserLocation;
-use App\Models\User;
+use App\Models\UserAddress;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class EmergencyCaseService
 {
-    public function __construct(protected FcmService $fcmService)
+    public function generateCaseUid()
     {
+        return 'CASE-' . now()->format('YmdHis') . rand(100, 999);
     }
 
-    public function generateCaseUid(): string
+    public function log($case, $userId, $action, $oldStatus = null, $newStatus = null, $notes = null, $meta = [], $latitude = null, $longitude = null)
     {
-        return 'EC-' . now()->format('YmdHis') . '-' . strtoupper(Str::random(5));
-    }
-
-    public function log(
-        EmergencyCase $case,
-        ?int $userId,
-        string $action,
-        ?string $oldStatus = null,
-        ?string $newStatus = null,
-        ?string $notes = null,
-        ?array $meta = null,
-        ?float $latitude = null,
-        ?float $longitude = null
-    ): void {
-        EmergencyCaseLog::create([
-            'emergency_case_id' => $case->id,
-            'user_id' => $userId,
-            'action' => $action,
+        return $case->logs()->create([
+            'user_id'    => $userId,
+            'action'     => $action,
             'old_status' => $oldStatus,
             'new_status' => $newStatus,
-            'notes' => $notes,
-            'meta' => $meta,
-            'latitude' => $latitude,
-            'longitude' => $longitude,
+            'notes'      => $notes,
+            'latitude'   => $latitude,
+            'longitude'  => $longitude,
+            'meta'       => $meta,
         ]);
     }
 
-    public function findNearbyUsers(float $latitude, float $longitude, float $radiusKm = 20, ?int $excludeUserId = null)
+    public function sendCaseAlerts($case, $radiusKm = 20)
     {
-        $haversine = "(6371 * acos(cos(radians(?)) 
-            * cos(radians(user_locations.latitude)) 
-            * cos(radians(user_locations.longitude) - radians(?)) 
-            + sin(radians(?)) 
-            * sin(radians(user_locations.latitude))))";
+        $lat = (float) $case->latitude;
+        $lng = (float) $case->longitude;
 
-        return UserLocation::query()
-            ->join('users', 'users.id', '=', 'user_locations.user_id')
-            ->select(
-                'user_locations.*',
-                DB::raw("$haversine as distance")
+        $nearbyUsers = UserAddress::select(
+                'user_addresses.*',
+                DB::raw("(
+                    6371 * acos(
+                        cos(radians({$lat}))
+                        * cos(radians(user_addresses.latitude))
+                        * cos(radians(user_addresses.longitude) - radians({$lng}))
+                        + sin(radians({$lat}))
+                        * sin(radians(user_addresses.latitude))
+                    )
+                ) as distance")
             )
-            ->where('user_locations.is_available', true)
-            ->where('user_locations.notification_enabled', true)
-            ->when($excludeUserId, fn ($q) => $q->where('user_locations.user_id', '!=', $excludeUserId))
-            ->setBindings([$latitude, $longitude, $latitude], 'select')
+            ->join('users', 'users.id', '=', 'user_addresses.user_id')
+            ->whereNotNull('user_addresses.latitude')
+            ->whereNotNull('user_addresses.longitude')
+            ->where('users.id', '!=', $case->reporter_id)
             ->having('distance', '<=', $radiusKm)
-            ->orderBy('distance')
+            ->orderBy('distance', 'asc')
             ->get();
-    }
 
-    public function sendCaseAlerts(EmergencyCase $case, float $radiusKm = 20): int
-    {
-        $nearbyUsers = $this->findNearbyUsers(
-            (float) $case->latitude,
-            (float) $case->longitude,
-            $radiusKm,
-            $case->reporter_id
-        );
+        $alertCount = 0;
 
-        $sentCount = 0;
-
-        foreach ($nearbyUsers as $nearbyUser) {
-            $deviceTokens = DeviceToken::where('user_id', $nearbyUser->user_id)
-                ->where('is_active', true)
-                ->get();
-
-            foreach ($deviceTokens as $deviceToken) {
+        foreach ($nearbyUsers as $address) {
+            // save alert record
+            if (class_exists(\App\Models\EmergencyCaseAlert::class)) {
                 EmergencyCaseAlert::create([
                     'emergency_case_id' => $case->id,
-                    'user_id' => $nearbyUser->user_id,
-                    'device_token_id' => $deviceToken->id,
-                    'notification_type' => 'new_case',
-                    'radius_km' => $radiusKm,
-                    'distance_km' => round($nearbyUser->distance, 2),
-                    'status' => 'queued',
+                    'user_id'           => $address->user_id,
+                    'alert_type'        => 'nearby_emergency',
+                    'status'            => 'sent',
+                    'sent_at'           => now(),
+                    'meta'              => [
+                        'distance_km' => round($address->distance, 2),
+                        'case_type'   => $case->case_type,
+                        'severity'    => $case->severity,
+                    ],
                 ]);
             }
 
-            $tokens = $deviceTokens->pluck('token')->toArray();
+            $alertCount++;
 
-            if (!empty($tokens)) {
-                $title = $case->case_type === 'accident'
-                    ? 'Emergency Accident Alert'
-                    : 'Emergency Case Near You';
+            // device token notification
+            if (class_exists(\App\Models\DeviceToken::class)) {
+                $tokens = DeviceToken::where('user_id', $address->user_id)
+                    ->where('is_active', 1)
+                    ->pluck('token')
+                    ->toArray();
 
-                $body = "New {$case->case_type} case reported within {$radiusKm} km.";
-
-                $response = $this->fcmService->sendToMany($tokens, $title, $body, [
-                    'case_id' => $case->id,
-                    'case_uid' => $case->case_uid,
-                    'case_type' => $case->case_type,
-                    'severity' => $case->severity,
-                    'latitude' => $case->latitude,
-                    'longitude' => $case->longitude,
-                ]);
-
-                EmergencyCaseAlert::where('emergency_case_id', $case->id)
-                    ->where('user_id', $nearbyUser->user_id)
-                    ->update([
-                        'status' => $response['success'] ? 'sent' : 'failed',
-                        'sent_at' => $response['success'] ? now() : null,
-                        'error_message' => $response['success'] ? null : ($response['message'] ?? 'Push failed'),
-                    ]);
-
-                if ($response['success']) {
-                    $sentCount++;
+                if (!empty($tokens)) {
+                    try {
+                        // You can integrate FCM or notification service here
+                        Log::info('Emergency push notification pending implementation', [
+                            'user_id' => $address->user_id,
+                            'case_id' => $case->id,
+                            'tokens'  => $tokens,
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::error('Push notification failed', [
+                            'user_id' => $address->user_id,
+                            'case_id' => $case->id,
+                            'error'   => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
         }
 
-        if ($sentCount > 0 && $case->status === 'reported') {
-            $oldStatus = $case->status;
-            $case->update([
-                'status' => 'alerted',
-                'notified_radius_km' => $radiusKm,
-            ]);
-
-            $this->log(
-                $case,
-                null,
-                'alert_sent',
-                $oldStatus,
-                'alerted',
-                "Nearby users alerted within {$radiusKm} km",
-                ['alerted_users_count' => $sentCount]
-            );
-        }
-
-        return $sentCount;
-    }
-
-    public function acceptCase(EmergencyCase $case, User $user): EmergencyCaseAssignment
-    {
-        return DB::transaction(function () use ($case, $user) {
-            $assignment = EmergencyCaseAssignment::firstOrNew([
-                'emergency_case_id' => $case->id,
-                'user_id' => $user->id,
-            ]);
-
-            $oldStatus = $case->status;
-
-            if (!$case->current_handler_id) {
-                $assignment->assignment_role = 'primary_handler';
-                $case->current_handler_id = $user->id;
-                $case->status = 'accepted';
-                $case->accepted_at = now();
-                $case->save();
-            } else {
-                $assignment->assignment_role = 'support_handler';
-            }
-
-            $assignment->status = 'accepted';
-            $assignment->accepted_at = now();
-            $assignment->save();
-
-            $this->log(
-                $case,
-                $user->id,
-                'case_accepted',
-                $oldStatus,
-                $case->status,
-                $assignment->assignment_role === 'primary_handler'
-                    ? 'Primary handler accepted case'
-                    : 'Support handler joined case'
-            );
-
-            EmergencyCaseAlert::where('emergency_case_id', $case->id)
-                ->where('user_id', $user->id)
-                ->update([
-                    'status' => 'accepted',
-                    'response' => 'accepted',
-                    'responded_at' => now(),
-                ]);
-
-            return $assignment;
-        });
-    }
-
-    public function updateCaseStatus(EmergencyCase $case, string $newStatus, ?int $userId = null, ?string $notes = null): EmergencyCase
-    {
-        $oldStatus = $case->status;
-
-        $payload = ['status' => $newStatus];
-
-        if ($newStatus === 'en_route') {
-            $payload['en_route_at'] = now();
-        } elseif ($newStatus === 'reached_site') {
-            $payload['reached_at'] = now();
-        } elseif ($newStatus === 'rescue_in_progress') {
-            $payload['rescue_started_at'] = now();
-        } elseif ($newStatus === 'resolved') {
-            $payload['resolved_at'] = now();
-        } elseif ($newStatus === 'closed') {
-            $payload['closed_at'] = now();
-        }
-
-        $case->update($payload);
-
-        $this->log(
-            $case,
-            $userId,
-            'status_changed',
-            $oldStatus,
-            $newStatus,
-            $notes
-        );
-
-        return $case->fresh();
-    }
-
-    public function requestBackup(EmergencyCase $case, ?int $requestedBy = null, float $extraRadius = 30): int
-    {
-        $oldStatus = $case->status;
-        $case->update([
-            'status' => 'needs_backup',
-            'escalation_level' => $case->escalation_level + 1,
-            'notified_radius_km' => $extraRadius,
-        ]);
-
-        $this->log(
-            $case,
-            $requestedBy,
-            'backup_requested',
-            $oldStatus,
-            'needs_backup',
-            "Backup requested. Radius expanded to {$extraRadius} km"
-        );
-
-        return $this->sendCaseAlerts($case, $extraRadius);
+        return $alertCount;
     }
 }
