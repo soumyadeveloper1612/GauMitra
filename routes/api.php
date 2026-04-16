@@ -30,4 +30,3 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/emergency-cases/{id}/resolve', [EmergencyCaseController::class, 'resolve']);
     Route::post('/emergency-cases/{id}/close', [EmergencyCaseController::class, 'close']);
 });
-

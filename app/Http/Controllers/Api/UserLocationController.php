@@ -5,12 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\UserLocation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class UserLocationController extends Controller
 {
     public function store(Request $request)
     {
+        $user = Auth::guard('sanctum')->user();
+
+        if (!$user) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
         $validator = Validator::make($request->all(), [
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
@@ -31,7 +41,7 @@ class UserLocationController extends Controller
         }
 
         $location = UserLocation::updateOrCreate(
-            ['user_id' => auth()->id()],
+            ['user_id' => $user->id],
             [
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude,
@@ -49,6 +59,7 @@ class UserLocationController extends Controller
             'status' => true,
             'message' => 'User location updated successfully',
             'data' => $location,
+            'auth_user_id' => $user->id,
         ]);
     }
 }
