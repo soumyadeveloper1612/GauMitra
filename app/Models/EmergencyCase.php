@@ -9,6 +9,8 @@ class EmergencyCase extends Model
 {
     use SoftDeletes;
 
+        protected $table = 'emergency_cases';
+
     protected $fillable = [
         'case_uid',
         'reporter_id',

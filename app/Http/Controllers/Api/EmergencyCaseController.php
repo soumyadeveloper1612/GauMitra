@@ -34,24 +34,28 @@ class EmergencyCaseController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'case_type' => ['required', Rule::in(EmergencyCase::TYPES)],
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'severity' => ['required', Rule::in(EmergencyCase::SEVERITIES)],
-            'cattle_count' => 'nullable|integer|min:1',
-            'contact_number' => 'nullable|string|max:20',
-            'vehicle_number' => 'nullable|string|max:50',
-            'vehicle_details' => 'nullable|string',
-            'full_address' => 'nullable|string|max:500',
-            'district' => 'nullable|string|max:150',
-            'state' => 'nullable|string|max:150',
-            'pincode' => 'nullable|string|max:20',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-            'photos.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'videos.*' => 'nullable|mimes:mp4,mov,avi,mkv|max:20480',
-        ]);
+      $validator = Validator::make($request->all(), [
+    'case_type' => ['required', Rule::in(EmergencyCase::TYPES)],
+    'title' => 'required|string|max:255',
+    'description' => 'nullable|string',
+    'severity' => ['required', Rule::in(EmergencyCase::SEVERITIES)],
+    'cattle_count' => 'nullable|integer|min:1',
+    'contact_number' => 'nullable|string|max:20',
+    'vehicle_number' => 'nullable|string|max:50',
+    'vehicle_details' => 'nullable|string',
+    'full_address' => 'nullable|string|max:500',
+    'district' => 'nullable|string|max:150',
+    'state' => 'nullable|string|max:150',
+    'pincode' => 'nullable|string|max:20',
+    'latitude' => 'required|numeric|between:-90,90',
+    'longitude' => 'required|numeric|between:-180,180',
+
+    'photos' => 'nullable|array',
+    'photos.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+
+    'videos' => 'nullable|array',
+    'videos.*' => 'nullable|mimes:mp4,mov,avi,mkv|max:20480',
+]);
 
         if ($validator->fails()) {
             return response()->json([
