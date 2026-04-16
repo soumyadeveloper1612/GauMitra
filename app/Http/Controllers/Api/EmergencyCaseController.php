@@ -32,58 +32,137 @@ class EmergencyCaseController extends Controller
         ]);
     }
 
+// public function store(Request $request)
+// {
+//     $validator = Validator::make($request->all(), [
+//         'case_type'      => ['required', Rule::in(EmergencyCase::TYPES)],
+//         'severity'       => ['required', Rule::in(EmergencyCase::SEVERITIES)],
+//         'contact_number' => 'nullable|string|max:20',
+//         'full_address'   => 'nullable|string|max:500',
+//         'area_name'      => 'nullable|string|max:255',
+//         'land_mark'      => 'nullable|string|max:255',
+//         'road_name'      => 'nullable|string|max:255',
+//         'city'           => 'nullable|string|max:150',
+//         'latitude'       => 'required|numeric|between:-90,90',
+//         'longitude'      => 'required|numeric|between:-180,180',
+
+//         'photos'         => 'nullable|array',
+//         'photos.*'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+
+//         'videos'         => 'nullable|array',
+//         'videos.*'       => 'nullable|mimes:mp4,mov,avi,mkv|max:40960',
+//     ]);
+
+//     if ($validator->fails()) {
+//         return response()->json([
+//             'status'  => false,
+//             'message' => $validator->errors()->first(),
+//             'errors'  => $validator->errors(),
+//         ], 422);
+//     }
+
+//     $case = DB::transaction(function () use ($request) {
+//         $case = EmergencyCase::create([
+//             'case_uid'       => $this->caseService->generateCaseUid(),
+//             'reporter_id'    => auth()->id(),
+//             'case_type'      => $request->case_type,
+//             'severity'       => $request->severity,
+//             'contact_number' => $request->contact_number,
+//             'full_address'   => $request->full_address,
+//             'area_name'      => $request->area_name,
+//             'land_mark'      => $request->land_mark,
+//             'road_name'      => $request->road_name,
+//             'city'           => $request->city,
+//             'latitude'       => $request->latitude,
+//             'longitude'      => $request->longitude,
+//             'status'         => 'reported',
+//         ]);
+
+//         $this->caseService->log(
+//             $case,
+//             auth()->id(),
+//             'case_reported',
+//             null,
+//             'reported',
+//             'Emergency case created',
+//             [
+//                 'case_type' => $case->case_type,
+//                 'severity'  => $case->severity,
+//             ],
+//             (float) $case->latitude,
+//             (float) $case->longitude
+//         );
+
+//         if ($request->hasFile('photos')) {
+//             foreach ($request->file('photos') as $file) {
+//                 $path = $file->store('emergency_cases/photos', 'public');
+
+//                 EmergencyCaseMedia::create([
+//                     'emergency_case_id' => $case->id,
+//                     'user_id'           => auth()->id(),
+//                     'media_type'        => 'photo',
+//                     'file_path'         => $path,
+//                     'file_name'         => $file->getClientOriginalName(),
+//                     'mime_type'         => $file->getMimeType(),
+//                     'file_size'         => $file->getSize(),
+//                 ]);
+//             }
+//         }
+
+//         if ($request->hasFile('videos')) {
+//             foreach ($request->file('videos') as $file) {
+//                 $path = $file->store('emergency_cases/videos', 'public');
+
+//                 EmergencyCaseMedia::create([
+//                     'emergency_case_id' => $case->id,
+//                     'user_id'           => auth()->id(),
+//                     'media_type'        => 'video',
+//                     'file_path'         => $path,
+//                     'file_name'         => $file->getClientOriginalName(),
+//                     'mime_type'         => $file->getMimeType(),
+//                     'file_size'         => $file->getSize(),
+//                 ]);
+//             }
+//         }
+
+//         return $case;
+//     });
+
+//     $shouldAlertImmediately =
+//         in_array($case->case_type, ['accident', 'illegal_transport']) ||
+//         in_array($case->severity, ['high', 'critical']);
+
+//     $alertCount = 0;
+
+//     if ($shouldAlertImmediately) {
+//         $alertCount = $this->caseService->sendCaseAlerts($case, 20);
+//     }
+
+//     return response()->json([
+//         'status'        => true,
+//         'message'       => 'Emergency case reported successfully',
+//         'data'          => $case->load('media'),
+//         'alerted_users' => $alertCount,
+//     ], 201);
+// }
+
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'case_type' => ['required', Rule::in(EmergencyCase::TYPES)],
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'severity' => ['required', Rule::in(EmergencyCase::SEVERITIES)],
-            'cattle_count' => 'nullable|integer|min:1',
-            'contact_number' => 'nullable|string|max:20',
-            'vehicle_number' => 'nullable|string|max:50',
-            'vehicle_details' => 'nullable|string',
-            'full_address' => 'nullable|string|max:500',
-            'district' => 'nullable|string|max:150',
-            'state' => 'nullable|string|max:150',
-            'pincode' => 'nullable|string|max:20',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-
-            'photos' => 'nullable|array',
-            'photos.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
-
-            'videos' => 'nullable|array',
-            'videos.*' => 'nullable|mimes:mp4,mov,avi,mkv|max:40960',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => $validator->errors()->first(),
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $case = DB::transaction(function () use ($request) {
             $case = EmergencyCase::create([
-                'case_uid' => $this->caseService->generateCaseUid(),
-                'reporter_id' => auth()->id(),
-                'case_type' => $request->case_type,
-                'title' => $request->title,
-                'description' => $request->description,
-                'severity' => $request->severity,
-                'cattle_count' => $request->cattle_count,
+                'case_uid'       => $this->caseService->generateCaseUid(),
+                'reporter_id'    => auth()->id(),
+                'case_type'      => $request->case_type,
+                'severity'       => $request->severity,
                 'contact_number' => $request->contact_number,
-                'vehicle_number' => $request->vehicle_number,
-                'vehicle_details' => $request->vehicle_details,
-                'full_address' => $request->full_address,
-                'district' => $request->district,
-                'state' => $request->state,
-                'pincode' => $request->pincode,
-                'latitude' => $request->latitude,
-                'longitude' => $request->longitude,
-                'status' => 'reported',
+                'full_address'   => $request->full_address,
+                'area_name'      => $request->area_name,
+                'land_mark'      => $request->land_mark,
+                'road_name'      => $request->road_name,
+                'city'           => $request->city,
+                'latitude'       => $request->latitude,
+                'longitude'      => $request->longitude,
+                'status'         => 'reported',
             ]);
 
             $this->caseService->log(
@@ -95,7 +174,7 @@ class EmergencyCaseController extends Controller
                 'Emergency case created',
                 [
                     'case_type' => $case->case_type,
-                    'severity' => $case->severity,
+                    'severity'  => $case->severity,
                 ],
                 (float) $case->latitude,
                 (float) $case->longitude
@@ -107,12 +186,12 @@ class EmergencyCaseController extends Controller
 
                     EmergencyCaseMedia::create([
                         'emergency_case_id' => $case->id,
-                        'user_id' => auth()->id(),
-                        'media_type' => 'photo',
-                        'file_path' => $path,
-                        'file_name' => $file->getClientOriginalName(),
-                        'mime_type' => $file->getMimeType(),
-                        'file_size' => $file->getSize(),
+                        'user_id'           => auth()->id(),
+                        'media_type'        => 'photo',
+                        'file_path'         => $path,
+                        'file_name'         => $file->getClientOriginalName(),
+                        'mime_type'         => $file->getMimeType(),
+                        'file_size'         => $file->getSize(),
                     ]);
                 }
             }
@@ -123,12 +202,12 @@ class EmergencyCaseController extends Controller
 
                     EmergencyCaseMedia::create([
                         'emergency_case_id' => $case->id,
-                        'user_id' => auth()->id(),
-                        'media_type' => 'video',
-                        'file_path' => $path,
-                        'file_name' => $file->getClientOriginalName(),
-                        'mime_type' => $file->getMimeType(),
-                        'file_size' => $file->getSize(),
+                        'user_id'           => auth()->id(),
+                        'media_type'        => 'video',
+                        'file_path'         => $path,
+                        'file_name'         => $file->getClientOriginalName(),
+                        'mime_type'         => $file->getMimeType(),
+                        'file_size'         => $file->getSize(),
                     ]);
                 }
             }
@@ -136,7 +215,8 @@ class EmergencyCaseController extends Controller
             return $case;
         });
 
-        $shouldAlertImmediately = in_array($case->case_type, ['accident', 'illegal_transport']) ||
+        $shouldAlertImmediately =
+            in_array($case->case_type, ['accident', 'illegal_transport']) ||
             in_array($case->severity, ['high', 'critical']);
 
         $alertCount = 0;
@@ -146,9 +226,9 @@ class EmergencyCaseController extends Controller
         }
 
         return response()->json([
-            'status' => true,
-            'message' => 'Emergency case reported successfully',
-            'data' => $case->load('media'),
+            'status'        => true,
+            'message'       => 'Emergency case reported successfully',
+            'data'          => $case->load('media'),
             'alerted_users' => $alertCount,
         ], 201);
     }
