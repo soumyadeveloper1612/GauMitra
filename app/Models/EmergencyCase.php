@@ -9,7 +9,7 @@ class EmergencyCase extends Model
 {
     use SoftDeletes;
 
-        protected $table = 'emergency_cases';
+    protected $table = 'emergency_cases';
 
     protected $fillable = [
         'case_uid',
@@ -26,6 +26,10 @@ class EmergencyCase extends Model
         'vehicle_number',
         'vehicle_details',
         'full_address',
+        'area_name',
+        'land_mark',
+        'road_name',
+        'city',
         'district',
         'state',
         'pincode',

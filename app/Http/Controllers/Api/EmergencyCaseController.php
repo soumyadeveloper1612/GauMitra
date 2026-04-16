@@ -148,89 +148,119 @@ class EmergencyCaseController extends Controller
 
     public function store(Request $request)
     {
-        $case = DB::transaction(function () use ($request) {
-            $case = EmergencyCase::create([
-                'case_uid'       => $this->caseService->generateCaseUid(),
-                'reporter_id'    => auth()->id(),
-                'case_type'      => $request->case_type,
-                'severity'       => $request->severity,
-                'contact_number' => $request->contact_number,
-                'full_address'   => $request->full_address,
-                'area_name'      => $request->area_name,
-                'land_mark'      => $request->land_mark,
-                'road_name'      => $request->road_name,
-                'city'           => $request->city,
-                'latitude'       => $request->latitude,
-                'longitude'      => $request->longitude,
-                'status'         => 'reported',
-            ]);
+        try {
+            $case = DB::transaction(function () use ($request) {
 
-            $this->caseService->log(
-                $case,
-                auth()->id(),
-                'case_reported',
-                null,
-                'reported',
-                'Emergency case created',
-                [
-                    'case_type' => $case->case_type,
-                    'severity'  => $case->severity,
-                ],
-                (float) $case->latitude,
-                (float) $case->longitude
-            );
+                $case = EmergencyCase::create([
+                    'case_uid'       => $this->caseService->generateCaseUid(),
+                    'reporter_id'    => auth()->id(),
+                    'case_type'      => $request->case_type,
+                    'title'          => $request->title ?? 'Emergency Case',
+                    'description'    => $request->description ?? null,
+                    'severity'       => $request->severity,
+                    'contact_number' => $request->contact_number,
+                    'full_address'   => $request->full_address,
+                    'area_name'      => $request->area_name,
+                    'land_mark'      => $request->land_mark,
+                    'road_name'      => $request->road_name,
+                    'city'           => $request->city,
+                    'latitude'       => $request->latitude,
+                    'longitude'      => $request->longitude,
+                    'status'         => 'reported',
+                ]);
 
-            if ($request->hasFile('photos')) {
-                foreach ($request->file('photos') as $file) {
-                    $path = $file->store('emergency_cases/photos', 'public');
+                $this->caseService->log(
+                    $case,
+                    auth()->id(),
+                    'case_reported',
+                    null,
+                    'reported',
+                    'Emergency case created',
+                    [
+                        'case_type' => $case->case_type,
+                        'severity'  => $case->severity,
+                    ],
+                    (float) $case->latitude,
+                    (float) $case->longitude
+                );
 
-                    EmergencyCaseMedia::create([
-                        'emergency_case_id' => $case->id,
-                        'user_id'           => auth()->id(),
-                        'media_type'        => 'photo',
-                        'file_path'         => $path,
-                        'file_name'         => $file->getClientOriginalName(),
-                        'mime_type'         => $file->getMimeType(),
-                        'file_size'         => $file->getSize(),
-                    ]);
+                if ($request->hasFile('photos')) {
+                    $photos = $request->file('photos');
+
+                    if (!is_array($photos)) {
+                        $photos = [$photos];
+                    }
+
+                    foreach ($photos as $file) {
+                        if ($file && $file->isValid()) {
+                            $path = $file->store('emergency_cases/photos', 'public');
+
+                            EmergencyCaseMedia::create([
+                                'emergency_case_id' => $case->id,
+                                'user_id'           => auth()->id(),
+                                'media_type'        => 'photo',
+                                'file_path'         => $path,
+                                'file_name'         => $file->getClientOriginalName(),
+                                'mime_type'         => $file->getMimeType(),
+                                'file_size'         => $file->getSize(),
+                            ]);
+                        }
+                    }
                 }
+
+                if ($request->hasFile('videos')) {
+                    $videos = $request->file('videos');
+
+                    if (!is_array($videos)) {
+                        $videos = [$videos];
+                    }
+
+                    foreach ($videos as $file) {
+                        if ($file && $file->isValid()) {
+                            $path = $file->store('emergency_cases/videos', 'public');
+
+                            EmergencyCaseMedia::create([
+                                'emergency_case_id' => $case->id,
+                                'user_id'           => auth()->id(),
+                                'media_type'        => 'video',
+                                'file_path'         => $path,
+                                'file_name'         => $file->getClientOriginalName(),
+                                'mime_type'         => $file->getMimeType(),
+                                'file_size'         => $file->getSize(),
+                            ]);
+                        }
+                    }
+                }
+
+                return $case;
+            });
+
+            $shouldAlertImmediately =
+                in_array($case->case_type, ['accident', 'illegal_transport']) ||
+                in_array($case->severity, ['high', 'critical']);
+
+            $alertCount = 0;
+
+            if ($shouldAlertImmediately) {
+                $alertCount = $this->caseService->sendCaseAlerts($case, 20);
             }
 
-            if ($request->hasFile('videos')) {
-                foreach ($request->file('videos') as $file) {
-                    $path = $file->store('emergency_cases/videos', 'public');
+            return response()->json([
+                'status'        => true,
+                'message'       => 'Emergency case reported successfully',
+                'data'          => $case->load('media'),
+                'alerted_users' => $alertCount,
+            ], 201);
 
-                    EmergencyCaseMedia::create([
-                        'emergency_case_id' => $case->id,
-                        'user_id'           => auth()->id(),
-                        'media_type'        => 'video',
-                        'file_path'         => $path,
-                        'file_name'         => $file->getClientOriginalName(),
-                        'mime_type'         => $file->getMimeType(),
-                        'file_size'         => $file->getSize(),
-                    ]);
-                }
-            }
-
-            return $case;
-        });
-
-        $shouldAlertImmediately =
-            in_array($case->case_type, ['accident', 'illegal_transport']) ||
-            in_array($case->severity, ['high', 'critical']);
-
-        $alertCount = 0;
-
-        if ($shouldAlertImmediately) {
-            $alertCount = $this->caseService->sendCaseAlerts($case, 20);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server Error',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ], 500);
         }
-
-        return response()->json([
-            'status'        => true,
-            'message'       => 'Emergency case reported successfully',
-            'data'          => $case->load('media'),
-            'alerted_users' => $alertCount,
-        ], 201);
     }
 
     public function show($id)
