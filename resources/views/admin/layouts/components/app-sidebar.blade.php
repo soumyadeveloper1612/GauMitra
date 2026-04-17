@@ -23,7 +23,7 @@
         <ul class="sidebar-menu">
             <li class="menu-item">
                 <a href="{{ route('admin.dashboard') }}"
-                   class="menu-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
+                    class="menu-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
                     <span class="nav-icon"><i class="bi bi-grid-fill"></i></span>
                     <span class="nav-text">Dashboard</span>
                 </a>
@@ -31,7 +31,7 @@
 
             <li class="menu-item">
                 <a href="{{ route('admin.users.index') }}"
-                   class="menu-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
+                    class="menu-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
                     <span class="nav-icon"><i class="bi bi-people-fill"></i></span>
                     <span class="nav-text">Users</span>
                 </a>
@@ -48,7 +48,7 @@
                 <ul class="submenu" style="{{ $gaushalaMenuOpen ? 'display:block;' : 'display:none;' }}">
                     <li>
                         <a href="{{ route('admin.gaushalas.create') }}"
-                           class="{{ request()->routeIs('admin.gaushalas.create') ? 'active' : '' }}">
+                            class="{{ request()->routeIs('admin.gaushalas.create') ? 'active' : '' }}">
                             <span class="submenu-dot"></span>
                             <span>Create Gaushala</span>
                         </a>
@@ -56,7 +56,7 @@
 
                     <li>
                         <a href="{{ route('admin.gaushalas.index') }}"
-                           class="{{ request()->routeIs('admin.gaushalas.index') ? 'active' : '' }}">
+                            class="{{ request()->routeIs('admin.gaushalas.index') ? 'active' : '' }}">
                             <span class="submenu-dot"></span>
                             <span>Manage Gaushala</span>
                         </a>
@@ -75,7 +75,7 @@
                 <ul class="submenu" style="{{ $reportMenuOpen ? 'display:block;' : 'display:none;' }}">
                     <li>
                         <a href="{{ route('admin.report-cases.index') }}"
-                           class="{{ request()->routeIs('admin.report-cases.*') ? 'active' : '' }}">
+                            class="{{ request()->routeIs('admin.report-cases.*') ? 'active' : '' }}">
                             <span class="submenu-dot"></span>
                             <span>Report Cases</span>
                         </a>
@@ -118,6 +118,26 @@
                         </a>
                     </li>
                 </ul>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="collapse" href="#newsNoticeMenu" role="button"
+                    aria-expanded="false">
+                    <i class="bi bi-megaphone"></i>
+                    <span>News & Notices</span>
+                </a>
+                <div class="collapse" id="newsNoticeMenu">
+                    <ul class="nav flex-column ms-3">
+                        <li class="nav-item">
+                            <a href="{{ route('admin.news-notices.create') }}" class="nav-link">Create News &
+                                Notice</a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('admin.news-notices.index') }}" class="nav-link">Manage News &
+                                Notices</a>
+                        </li>
+                    </ul>
+                </div>
             </li>
 
             <li class="menu-item">
