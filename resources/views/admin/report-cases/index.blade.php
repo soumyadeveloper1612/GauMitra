@@ -301,10 +301,13 @@
 @if(session('success'))
     <div class="alert alert-success rounded-4">{{ session('success') }}</div>
 @endif
-
+{{-- 
 <div class="report-page-header">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-      
+        <div>
+            <h2>Emergency Report Case Management</h2>
+            <p>Track, assign, filter and manage rescue cases from one clean and easy-to-use panel.</p>
+        </div>
 
         @if(!empty($filters['card']))
             <div class="active-filter-chip">
@@ -314,7 +317,7 @@
             </div>
         @endif
     </div>
-</div>
+</div> --}}
 
 <div class="row g-4 mb-4">
     <div class="col-md-6 col-xl">
