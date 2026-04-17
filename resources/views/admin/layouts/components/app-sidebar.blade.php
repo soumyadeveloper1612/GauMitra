@@ -99,7 +99,8 @@
             </li>
 
             <li class="menu-item has-submenu {{ $newsNoticeMenuOpen ? 'open' : '' }}">
-                <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $newsNoticeMenuOpen ? 'active' : '' }}">
+                <a href="javascript:void(0)"
+                    class="menu-link submenu-toggle {{ $newsNoticeMenuOpen ? 'active' : '' }}">
                     <span class="nav-icon"><i class="bi bi-megaphone-fill"></i></span>
                     <span class="nav-text">News & Notices</span>
                     <span class="nav-badge">New</span>
