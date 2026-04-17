@@ -569,7 +569,6 @@
                     <p class="text-muted mt-3 mb-0">Fetching address records...</p>
                 </div>
             `);
-
                 modal.show();
 
                 let url = "{{ route('admin.users.addresses', ':id') }}".replace(':id', userId);
