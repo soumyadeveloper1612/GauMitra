@@ -98,33 +98,33 @@
                 </ul>
             </li>
 
-            <li class="menu-item has-submenu {{ $newsNoticeMenuOpen ? 'open' : '' }}">
-                <a href="javascript:void(0)"
-                    class="menu-link submenu-toggle {{ $newsNoticeMenuOpen ? 'active' : '' }}">
-                    <span class="nav-icon"><i class="bi bi-megaphone-fill"></i></span>
-                    <span class="nav-text">News & Notices</span>
-                    <span class="nav-badge">New</span>
-                    <span class="submenu-arrow"><i class="bi bi-chevron-down"></i></span>
-                </a>
+          
+<li class="menu-item has-submenu {{ $newsNoticeMenuOpen ? 'open' : '' }}">
+    <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $newsNoticeMenuOpen ? 'active' : '' }}">
+        <span class="nav-icon"><i class="bi bi-megaphone-fill"></i></span>
+        <span class="nav-text">News & Notices</span>
+        <span class="nav-badge">New</span>
+        <span class="submenu-arrow"><i class="bi bi-chevron-down"></i></span>
+    </a>
 
-                <ul class="submenu" style="{{ $newsNoticeMenuOpen ? 'display:block;' : 'display:none;' }}">
-                    <li>
-                        <a href="{{ route('admin.news-notices.create') }}"
-                            class="{{ request()->routeIs('admin.news-notices.create') ? 'active' : '' }}">
-                            <span class="submenu-dot"></span>
-                            <span>Create News & Notice</span>
-                        </a>
-                    </li>
+    <ul class="submenu" style="{{ $newsNoticeMenuOpen ? 'display:block;' : 'display:none;' }}">
+        <li>
+            <a href="{{ route('admin.news-notices.create') }}"
+               class="{{ request()->routeIs('admin.news-notices.create') ? 'active' : '' }}">
+                <span class="submenu-dot"></span>
+                <span>Create News & Notice</span>
+            </a>
+        </li>
 
-                    <li>
-                        <a href="{{ route('admin.news-notices.index') }}"
-                            class="{{ request()->routeIs('admin.news-notices.index') ? 'active' : '' }}">
-                            <span class="submenu-dot"></span>
-                            <span>Manage News & Notices</span>
-                        </a>
-                    </li>
-                </ul>
-            </li>
+        <li>
+            <a href="{{ route('admin.news-notices.index') }}"
+               class="{{ request()->routeIs('admin.news-notices.index') ? 'active' : '' }}">
+                <span class="submenu-dot"></span>
+                <span>Manage News & Notices</span>
+            </a>
+        </li>
+    </ul>
+</li>
 
             <li class="menu-item has-submenu {{ $adminMenuOpen ? 'open' : '' }}">
                 <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $adminMenuOpen ? 'active' : '' }}">

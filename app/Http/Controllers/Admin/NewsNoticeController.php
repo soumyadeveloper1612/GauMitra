@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\NewsNotice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class NewsNoticeController extends Controller
@@ -78,7 +79,9 @@ class NewsNoticeController extends Controller
 
             return redirect()->route('admin.news-notices.index')
                 ->with('success', 'News / Notice created successfully.');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('NewsNotice store error: ' . $e->getMessage());
+
             return redirect()->back()
                 ->withInput()
                 ->with('error', 'Something went wrong while creating the record.');
@@ -126,7 +129,9 @@ class NewsNoticeController extends Controller
 
             return redirect()->route('admin.news-notices.index')
                 ->with('success', 'News / Notice updated successfully.');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('NewsNotice update error: ' . $e->getMessage());
+
             return redirect()->back()
                 ->with('error', 'Something went wrong while updating the record.')
                 ->with('open_edit_modal', $id);
@@ -143,7 +148,9 @@ class NewsNoticeController extends Controller
 
             return redirect()->route('admin.news-notices.index')
                 ->with('success', 'News / Notice deleted successfully.');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('NewsNotice delete error: ' . $e->getMessage());
+
             return redirect()->route('admin.news-notices.index')
                 ->with('error', 'Something went wrong while deleting the record.');
         }

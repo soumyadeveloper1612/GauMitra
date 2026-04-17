@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class NewsNotice extends Model
 {
+    protected $table = 'news_notices';
+
     protected $fillable = [
         'category',
         'title',
@@ -44,15 +46,6 @@ class NewsNotice extends Model
             'medium' => 'Medium',
             'high'   => 'High',
             'urgent' => 'Urgent',
-        ];
-    }
-
-    public static function statusOptions(): array
-    {
-        return [
-            'active'   => 'Active',
-            'inactive' => 'Inactive',
-            'deleted'  => 'Deleted',
         ];
     }
 
