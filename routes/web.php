@@ -7,6 +7,7 @@ use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\GaushalaController;
 use App\Http\Controllers\Admin\AdminReportCaseController;
+use App\Http\Controllers\Admin\NewsNoticeController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -70,7 +71,17 @@ Route::middleware(['admin.auth'])->prefix('admin')->name('admin.')->group(functi
         Route::post('/{id}/status', [AdminReportCaseController::class, 'updateStatus'])->name('update-status');
         Route::post('/{id}/assign-handler', [AdminReportCaseController::class, 'assignHandler'])->name('assign-handler');
     });
+
+    Route::prefix('news-notices')->name('news-notices.')->group(function () {
+        Route::get('/', [NewsNoticeController::class, 'index'])->name('index');
+        Route::get('/create', [NewsNoticeController::class, 'create'])->name('create');
+        Route::post('/store', [NewsNoticeController::class, 'store'])->name('store');
+        Route::put('/{id}', [NewsNoticeController::class, 'update'])->name('update');
+        Route::delete('/{id}', [NewsNoticeController::class, 'destroy'])->name('destroy');
+    });
+
 });
+
 
 /*
 |--------------------------------------------------------------------------
