@@ -45,43 +45,50 @@ Route::middleware(['admin.auth'])->prefix('admin')->name('admin.')->group(functi
     | Users
     |--------------------------------------------------------------------------
     */
-    Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
-    Route::get('/users/export', [AdminUserController::class, 'export'])->name('users.export');
-    Route::get('/users/{id}', [AdminUserController::class, 'show'])->name('users.show');
-    Route::get('/users/{id}/addresses', [AdminUserController::class, 'addresses'])->name('users.addresses');
+    Route::prefix('users')->name('users.')->group(function () {
+        Route::get('/', [AdminUserController::class, 'index'])->name('index');
+        Route::get('/export', [AdminUserController::class, 'export'])->name('export');
+        Route::get('/{id}', [AdminUserController::class, 'show'])->name('show');
+        Route::get('/{id}/addresses', [AdminUserController::class, 'addresses'])->name('addresses');
+    });
 
     /*
     |--------------------------------------------------------------------------
     | Gaushalas
     |--------------------------------------------------------------------------
     */
-    Route::get('/gaushalas', [GaushalaController::class, 'index'])->name('gaushalas.index');
-    Route::get('/gaushalas/create', [GaushalaController::class, 'create'])->name('gaushalas.create');
-    Route::post('/gaushalas/store', [GaushalaController::class, 'store'])->name('gaushalas.store');
-    Route::get('/gaushalas/{id}', [GaushalaController::class, 'show'])->name('gaushalas.show');
+    Route::prefix('gaushalas')->name('gaushalas.')->group(function () {
+        Route::get('/', [GaushalaController::class, 'index'])->name('index');
+        Route::get('/create', [GaushalaController::class, 'create'])->name('create');
+        Route::post('/store', [GaushalaController::class, 'store'])->name('store');
+        Route::get('/{id}', [GaushalaController::class, 'show'])->name('show');
+    });
 
     /*
     |--------------------------------------------------------------------------
     | Report Cases
     |--------------------------------------------------------------------------
     */
-     Route::prefix('report-cases')->name('report-cases.')->group(function () {
+    Route::prefix('report-cases')->name('report-cases.')->group(function () {
         Route::get('/', [AdminReportCaseController::class, 'index'])->name('index');
         Route::get('/{id}', [AdminReportCaseController::class, 'show'])->name('show');
         Route::post('/{id}/status', [AdminReportCaseController::class, 'updateStatus'])->name('update-status');
         Route::post('/{id}/assign-handler', [AdminReportCaseController::class, 'assignHandler'])->name('assign-handler');
     });
 
-   Route::prefix('news-notices')->name('news-notices.')->group(function () {
-    Route::get('/', [NewsNoticeController::class, 'index'])->name('index');
-    Route::get('/create', [NewsNoticeController::class, 'create'])->name('create');
-    Route::post('/store', [NewsNoticeController::class, 'store'])->name('store');
-    Route::put('/{id}', [NewsNoticeController::class, 'update'])->name('update');
-    Route::delete('/{id}', [NewsNoticeController::class, 'destroy'])->name('destroy');
+    /*
+    |--------------------------------------------------------------------------
+    | News & Notices
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('news-notices')->name('news-notices.')->group(function () {
+        Route::get('/', [NewsNoticeController::class, 'index'])->name('index');
+        Route::get('/create', [NewsNoticeController::class, 'create'])->name('create');
+        Route::post('/store', [NewsNoticeController::class, 'store'])->name('store');
+        Route::put('/{id}', [NewsNoticeController::class, 'update'])->name('update');
+        Route::delete('/{id}', [NewsNoticeController::class, 'destroy'])->name('destroy');
+    });
 });
-
-});
-
 
 /*
 |--------------------------------------------------------------------------
