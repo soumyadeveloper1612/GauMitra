@@ -31,77 +31,48 @@ class AdminReportCaseController extends Controller
 
     public function index(Request $request)
     {
-        if (!Schema::hasTable('emergency_cases')) {
-            return view('admin.report-cases.index', [
-                'reports' => collect(),
-                'summary' => [
-                    'total' => 0,
-                    'pending' => 0,
-                    'active' => 0,
-                    'critical' => 0,
-                    'resolved' => 0,
-                ],
-                'filters' => $request->all(),
-                'statuses' => $this->statuses,
-                'responders' => collect(),
-            ]);
-        }
+        $statuses = [
+            'reported',
+            'alerted',
+            'accepted',
+            'en_route',
+            'reached_site',
+            'rescue_in_progress',
+            'needs_backup',
+            'treatment_started',
+            'shifted_to_gaushala',
+            'escalated',
+            'resolved',
+            'closed',
+            'false_report',
+            'cancelled',
+            'duplicate_case',
+            'unable_to_locate',
+        ];
 
-        $query = DB::table('emergency_cases as ec')
-            ->leftJoin('users as reporter', 'reporter.id', '=', 'ec.reporter_id')
-            ->leftJoin('users as handler', 'handler.id', '=', 'ec.current_handler_id')
+        $responders = User::where('status', 'active')
+            ->select('id', 'name', 'mobile')
+            ->orderBy('name')
+            ->get();
+
+        $query = EmergencyCase::query()
+            ->leftJoin('users as reporter', 'emergency_cases.reporter_id', '=', 'reporter.id')
+            ->leftJoin('users as handler', 'emergency_cases.current_handler_id', '=', 'handler.id')
             ->select(
-                'ec.*',
+                'emergency_cases.*',
                 'reporter.name as reporter_name',
                 'reporter.mobile as reporter_mobile',
                 'handler.name as handler_name',
                 'handler.mobile as handler_mobile'
             );
 
-        if ($request->filled('keyword')) {
-            $keyword = trim($request->keyword);
-            $query->where(function ($q) use ($keyword) {
-                $q->where('ec.case_uid', 'like', "%{$keyword}%")
-                    ->orWhere('ec.title', 'like', "%{$keyword}%")
-                    ->orWhere('ec.description', 'like', "%{$keyword}%")
-                    ->orWhere('ec.full_address', 'like', "%{$keyword}%")
-                    ->orWhere('ec.district', 'like', "%{$keyword}%")
-                    ->orWhere('ec.contact_number', 'like', "%{$keyword}%")
-                    ->orWhere('reporter.name', 'like', "%{$keyword}%")
-                    ->orWhere('reporter.mobile', 'like', "%{$keyword}%");
-            });
-        }
+        // Card filter
+        $card = $request->card;
 
-        if ($request->filled('status')) {
-            $query->where('ec.status', $request->status);
-        }
-
-        if ($request->filled('severity')) {
-            $query->where('ec.severity', $request->severity);
-        }
-
-        if ($request->filled('case_type')) {
-            $query->where('ec.case_type', $request->case_type);
-        }
-
-        if ($request->filled('district')) {
-            $query->where('ec.district', 'like', '%' . $request->district . '%');
-        }
-
-        if ($request->filled('date_from')) {
-            $query->whereDate('ec.created_at', '>=', $request->date_from);
-        }
-
-        if ($request->filled('date_to')) {
-            $query->whereDate('ec.created_at', '<=', $request->date_to);
-        }
-
-        $reports = $query->orderByDesc('ec.id')->get();
-
-        $summary = [
-            'total' => DB::table('emergency_cases')->count(),
-            'pending' => DB::table('emergency_cases')->whereIn('status', ['reported', 'alerted'])->count(),
-            'active' => DB::table('emergency_cases')->whereIn('status', [
+        if ($card === 'pending') {
+            $query->whereIn('emergency_cases.status', ['reported', 'alerted']);
+        } elseif ($card === 'active') {
+            $query->whereIn('emergency_cases.status', [
                 'accepted',
                 'en_route',
                 'reached_site',
@@ -109,20 +80,90 @@ class AdminReportCaseController extends Controller
                 'needs_backup',
                 'treatment_started',
                 'shifted_to_gaushala',
-                'escalated'
+                'escalated',
+            ]);
+        } elseif ($card === 'critical') {
+            $query->where('emergency_cases.severity', 'critical');
+        } elseif ($card === 'resolved') {
+            $query->whereIn('emergency_cases.status', ['resolved', 'closed']);
+        }
+
+        // Normal filters
+        if ($request->filled('keyword')) {
+            $keyword = trim($request->keyword);
+            $query->where(function ($q) use ($keyword) {
+                $q->where('emergency_cases.case_uid', 'like', "%{$keyword}%")
+                    ->orWhere('emergency_cases.title', 'like', "%{$keyword}%")
+                    ->orWhere('emergency_cases.contact_number', 'like', "%{$keyword}%")
+                    ->orWhere('emergency_cases.district', 'like', "%{$keyword}%")
+                    ->orWhere('reporter.name', 'like', "%{$keyword}%")
+                    ->orWhere('reporter.mobile', 'like', "%{$keyword}%");
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('emergency_cases.status', $request->status);
+        }
+
+        if ($request->filled('severity')) {
+            $query->where('emergency_cases.severity', $request->severity);
+        }
+
+        if ($request->filled('case_type')) {
+            $query->where('emergency_cases.case_type', $request->case_type);
+        }
+
+        if ($request->filled('district')) {
+            $query->where('emergency_cases.district', 'like', '%' . $request->district . '%');
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('emergency_cases.created_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('emergency_cases.created_at', '<=', $request->date_to);
+        }
+
+        $reports = $query->orderByDesc('emergency_cases.id')->get();
+
+        $summary = [
+            'total' => EmergencyCase::count(),
+            'pending' => EmergencyCase::whereIn('status', ['reported', 'alerted'])->count(),
+            'active' => EmergencyCase::whereIn('status', [
+                'accepted',
+                'en_route',
+                'reached_site',
+                'rescue_in_progress',
+                'needs_backup',
+                'treatment_started',
+                'shifted_to_gaushala',
+                'escalated',
             ])->count(),
-            'critical' => DB::table('emergency_cases')->where('severity', 'critical')->count(),
-            'resolved' => DB::table('emergency_cases')->whereIn('status', ['resolved', 'closed'])->count(),
+            'critical' => EmergencyCase::where('severity', 'critical')->count(),
+            'resolved' => EmergencyCase::whereIn('status', ['resolved', 'closed'])->count(),
         ];
 
-        return view('admin.report-cases.index', [
-            'reports' => $reports,
-            'summary' => $summary,
-            'filters' => $request->all(),
-            'statuses' => $this->statuses,
-            'responders' => $this->getResponderUsers(),
+        $filters = $request->only([
+            'keyword',
+            'status',
+            'severity',
+            'case_type',
+            'district',
+            'date_from',
+            'date_to',
+            'card',
         ]);
+
+        return view('admin.report_cases.index', compact(
+            'reports',
+            'summary',
+            'filters',
+            'statuses',
+            'responders'
+        ));
     }
+
 
     public function show($id)
     {
@@ -342,7 +383,7 @@ class AdminReportCaseController extends Controller
         ?string $oldStatus = null,
         ?string $newStatus = null,
         ?string $notes = null
-    ): void {
+        ): void {
         if (!Schema::hasTable('emergency_case_logs')) {
             return;
         }
