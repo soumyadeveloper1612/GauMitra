@@ -304,10 +304,7 @@
 
 <div class="report-page-header">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-        <div>
-            <h2>Emergency Report Case Management</h2>
-            <p>Track, assign, filter and manage rescue cases from one clean and easy-to-use panel.</p>
-        </div>
+      
 
         @if(!empty($filters['card']))
             <div class="active-filter-chip">
