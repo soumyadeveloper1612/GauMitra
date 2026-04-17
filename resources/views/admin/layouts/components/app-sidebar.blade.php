@@ -1,6 +1,7 @@
 @php
     $reportMenuOpen = request()->routeIs('admin.report-cases.*');
     $adminMenuOpen = request()->routeIs('admin.admins.*') || request()->routeIs('admin.roles.*');
+    $gaushalaMenuOpen = request()->routeIs('admin.gaushalas.*');
 @endphp
 
 <aside class="sidebar" id="sidebar">
@@ -34,6 +35,33 @@
                     <span class="nav-icon"><i class="bi bi-people-fill"></i></span>
                     <span class="nav-text">Users</span>
                 </a>
+            </li>
+
+            <li class="menu-item has-submenu {{ $gaushalaMenuOpen ? 'open' : '' }}">
+                <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $gaushalaMenuOpen ? 'active' : '' }}">
+                    <span class="nav-icon"><i class="bi bi-house-heart-fill"></i></span>
+                    <span class="nav-text">Gaushala</span>
+                    <span class="nav-badge">New</span>
+                    <span class="submenu-arrow"><i class="bi bi-chevron-down"></i></span>
+                </a>
+
+                <ul class="submenu" style="{{ $gaushalaMenuOpen ? 'display:block;' : 'display:none;' }}">
+                    <li>
+                        <a href="{{ route('admin.gaushalas.create') }}"
+                           class="{{ request()->routeIs('admin.gaushalas.create') ? 'active' : '' }}">
+                            <span class="submenu-dot"></span>
+                            <span>Create Gaushala</span>
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{{ route('admin.gaushalas.index') }}"
+                           class="{{ request()->routeIs('admin.gaushalas.index') ? 'active' : '' }}">
+                            <span class="submenu-dot"></span>
+                            <span>Manage Gaushala</span>
+                        </a>
+                    </li>
+                </ul>
             </li>
 
             <li class="menu-item has-submenu {{ $reportMenuOpen ? 'open' : '' }}">

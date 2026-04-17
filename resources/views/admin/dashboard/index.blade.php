@@ -3,25 +3,47 @@
 @section('title', 'Dashboard - GauMitra Admin')
 
 @section('content')
+    @php
+        $adminHealth = $totalAdmins > 0 ? round(($activeAdmins / $totalAdmins) * 100) : 0;
+    @endphp
+
     <style>
         .hero-panel {
-            background: linear-gradient(135deg, #fff7ed, #ffffff, #eff6ff);
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #fff7ed 0%, #ffffff 45%, #eff6ff 100%);
             border: 1px solid #fde7c7;
-            border-radius: 26px;
+            border-radius: 28px;
             padding: 28px;
-            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
             margin-bottom: 24px;
         }
 
-        .hero-panel h2 {
-            font-weight: 800;
-            margin-bottom: 8px;
-            color: #1f2937;
+        .hero-panel::before {
+            content: "";
+            position: absolute;
+            right: -80px;
+            top: -80px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: rgba(249, 115, 22, 0.08);
         }
 
-        .hero-panel p {
-            color: #6b7280;
-            margin-bottom: 0;
+        .hero-panel::after {
+            content: "";
+            position: absolute;
+            left: -70px;
+            bottom: -70px;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: rgba(37, 99, 235, 0.06);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
         }
 
         .quick-pill {
@@ -35,7 +57,66 @@
             border: 1px solid #fed7aa;
             font-size: 12px;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
+        }
+
+        .hero-title {
+            font-weight: 800;
+            font-size: 30px;
+            color: #111827;
+            margin-bottom: 10px;
+        }
+
+        .hero-text {
+            color: #6b7280;
+            margin-bottom: 20px;
+            max-width: 760px;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .hero-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 18px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 700;
+            transition: .25s ease;
+        }
+
+        .hero-btn-primary {
+            background: linear-gradient(135deg, #f97316, #fb923c);
+            color: #fff;
+            box-shadow: 0 10px 20px rgba(249, 115, 22, 0.22);
+        }
+
+        .hero-btn-primary:hover {
+            color: #fff;
+            transform: translateY(-2px);
+        }
+
+        .hero-btn-secondary {
+            background: #fff;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
+        }
+
+        .hero-btn-secondary:hover {
+            color: #111827;
+            transform: translateY(-2px);
+        }
+
+        .stat-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            height: 100%;
         }
 
         .stat-card {
@@ -49,7 +130,8 @@
         }
 
         .stat-card:hover {
-            transform: translateY(-4px);
+            transform: translateY(-5px);
+            box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
         }
 
         .stat-flex {
@@ -92,29 +174,12 @@
             flex-shrink: 0;
         }
 
-        .bg-orange {
-            background: linear-gradient(135deg, #f97316, #fb923c);
-        }
-
-        .bg-blue {
-            background: linear-gradient(135deg, #2563eb, #60a5fa);
-        }
-
-        .bg-green {
-            background: linear-gradient(135deg, #059669, #34d399);
-        }
-
-        .bg-purple {
-            background: linear-gradient(135deg, #7c3aed, #a78bfa);
-        }
-
-        .bg-red {
-            background: linear-gradient(135deg, #dc2626, #fb7185);
-        }
-
-        .bg-dark {
-            background: linear-gradient(135deg, #0f172a, #334155);
-        }
+        .bg-orange { background: linear-gradient(135deg, #f97316, #fb923c); }
+        .bg-blue { background: linear-gradient(135deg, #2563eb, #60a5fa); }
+        .bg-green { background: linear-gradient(135deg, #059669, #34d399); }
+        .bg-purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+        .bg-red { background: linear-gradient(135deg, #dc2626, #fb7185); }
+        .bg-dark { background: linear-gradient(135deg, #0f172a, #334155); }
 
         .section-card {
             background: #fff;
@@ -158,6 +223,52 @@
             border-radius: 999px;
             font-weight: 700;
             color: #111827;
+        }
+
+        .mini-action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .mini-action-card {
+            display: block;
+            text-decoration: none;
+            background: linear-gradient(135deg, #f8fafc, #ffffff);
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            padding: 18px;
+            transition: .25s ease;
+            color: inherit;
+        }
+
+        .mini-action-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 14px 26px rgba(15, 23, 42, 0.07);
+        }
+
+        .mini-action-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            color: #fff;
+            font-size: 20px;
+        }
+
+        .mini-action-card h6 {
+            margin: 0 0 6px;
+            font-weight: 800;
+            color: #111827;
+        }
+
+        .mini-action-card p {
+            margin: 0;
+            font-size: 13px;
+            color: #6b7280;
         }
 
         .table-wrap {
@@ -247,20 +358,62 @@
             border-radius: 18px;
             color: #64748b;
         }
+
+        @media (max-width: 767px) {
+            .hero-title {
+                font-size: 24px;
+            }
+
+            .mini-action-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
+
+    <div class="hero-panel">
+        <div class="hero-content">
+            <div class="quick-pill">
+                <i class="bi bi-stars"></i> Smart Control Center
+            </div>
+
+            <div class="hero-title">Welcome to GauMitra Admin Dashboard</div>
+            <p class="hero-text">
+                Monitor users, admins, emergency rescue activities, and registered gaushalas from one clean and
+                professional panel. The dashboard is now upgraded with dedicated Gaushala management access.
+            </p>
+
+            <div class="hero-actions">
+                <a href="{{ route('admin.gaushalas.create') }}" class="hero-btn hero-btn-primary">
+                    <i class="bi bi-plus-circle-fill"></i> Create Gaushala
+                </a>
+
+                <a href="{{ route('admin.gaushalas.index') }}" class="hero-btn hero-btn-secondary">
+                    <i class="bi bi-house-heart-fill"></i> Manage Gaushala
+                </a>
+
+                <a href="{{ route('admin.report-cases.index') }}" class="hero-btn hero-btn-secondary">
+                    <i class="bi bi-clipboard2-pulse-fill"></i> Manage Cases
+                </a>
+            </div>
+        </div>
+    </div>
 
     <div class="row g-4 mb-4">
         <div class="col-md-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-flex">
-                    <div>
-                        <h6>Total Users</h6>
-                        <h3>{{ $totalUsers }}</h3>
-                        <p>Registered application users</p>
+            <a href="{{ route('admin.users.index') }}" class="stat-link">
+                <div class="stat-card">
+                    <div class="stat-flex">
+                        <div>
+                            <h6>Total Users</h6>
+                            <h3>{{ $totalUsers }}</h3>
+                            <p>Registered application users</p>
+                        </div>
+                        <div class="icon-badge bg-orange">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
                     </div>
-                    <div class="icon-badge bg-orange"><i class="bi bi-people-fill"></i></div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-md-6 col-xl-3">
@@ -271,7 +424,9 @@
                         <h3>{{ $totalAdmins }}</h3>
                         <p>Admin accounts created</p>
                     </div>
-                    <div class="icon-badge bg-blue"><i class="bi bi-person-badge-fill"></i></div>
+                    <div class="icon-badge bg-blue">
+                        <i class="bi bi-person-badge-fill"></i>
+                    </div>
                 </div>
             </div>
         </div>
@@ -284,63 +439,81 @@
                         <h3>{{ $activeAdmins }}</h3>
                         <p>Currently active admin users</p>
                     </div>
-                    <div class="icon-badge bg-green"><i class="bi bi-shield-check"></i></div>
+                    <div class="icon-badge bg-green">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="col-md-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-flex">
-                    <div>
-                        <h6>OTP Records</h6>
-                        <h3>{{ $totalOtps }}</h3>
-                        <p>Total login OTP logs</p>
+            <a href="{{ route('admin.gaushalas.index') }}" class="stat-link">
+                <div class="stat-card">
+                    <div class="stat-flex">
+                        <div>
+                            <h6>Total Gaushalas</h6>
+                            <h3>{{ $totalGaushalas }}</h3>
+                            <p>Registered gaushala records</p>
+                        </div>
+                        <div class="icon-badge bg-purple">
+                            <i class="bi bi-house-heart-fill"></i>
+                        </div>
                     </div>
-                    <div class="icon-badge bg-purple"><i class="bi bi-key-fill"></i></div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 
     <div class="row g-4 mb-4">
         <div class="col-md-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-flex">
-                    <div>
-                        <h6>Total Reports</h6>
-                        <h3>{{ $totalReports }}</h3>
-                        <p>All emergency cases</p>
+            <a href="{{ route('admin.report-cases.index') }}" class="stat-link">
+                <div class="stat-card">
+                    <div class="stat-flex">
+                        <div>
+                            <h6>Total Reports</h6>
+                            <h3>{{ $totalReports }}</h3>
+                            <p>All emergency cases</p>
+                        </div>
+                        <div class="icon-badge bg-dark">
+                            <i class="bi bi-file-earmark-medical-fill"></i>
+                        </div>
                     </div>
-                    <div class="icon-badge bg-dark"><i class="bi bi-file-earmark-medical-fill"></i></div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-md-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-flex">
-                    <div>
-                        <h6>Pending Reports</h6>
-                        <h3>{{ $pendingReports }}</h3>
-                        <p>Waiting for quick response</p>
+            <a href="{{ route('admin.report-cases.index') }}" class="stat-link">
+                <div class="stat-card">
+                    <div class="stat-flex">
+                        <div>
+                            <h6>Pending Reports</h6>
+                            <h3>{{ $pendingReports }}</h3>
+                            <p>Waiting for quick response</p>
+                        </div>
+                        <div class="icon-badge bg-orange">
+                            <i class="bi bi-hourglass-split"></i>
+                        </div>
                     </div>
-                    <div class="icon-badge bg-orange"><i class="bi bi-hourglass-split"></i></div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-md-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-flex">
-                    <div>
-                        <h6>Critical Cases</h6>
-                        <h3>{{ $criticalReports }}</h3>
-                        <p>High priority active cases</p>
+            <a href="{{ route('admin.report-cases.index') }}" class="stat-link">
+                <div class="stat-card">
+                    <div class="stat-flex">
+                        <div>
+                            <h6>Critical Cases</h6>
+                            <h3>{{ $criticalReports }}</h3>
+                            <p>High priority active cases</p>
+                        </div>
+                        <div class="icon-badge bg-red">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        </div>
                     </div>
-                    <div class="icon-badge bg-red"><i class="bi bi-exclamation-triangle-fill"></i></div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-md-6 col-xl-3">
@@ -351,7 +524,9 @@
                         <h3>{{ $resolvedToday }}</h3>
                         <p>Cases completed today</p>
                     </div>
-                    <div class="icon-badge bg-green"><i class="bi bi-check-circle-fill"></i></div>
+                    <div class="icon-badge bg-green">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
                 </div>
             </div>
         </div>
@@ -367,6 +542,10 @@
                     <span class="breakdown-value">{{ $activeSessions }}</span>
                 </div>
                 <div class="breakdown-row">
+                    <span class="breakdown-label">Registered Gaushalas</span>
+                    <span class="breakdown-value">{{ $totalGaushalas }}</span>
+                </div>
+                <div class="breakdown-row">
                     <span class="breakdown-label">Active Rescue Cases</span>
                     <span class="breakdown-value">{{ $activeRescueReports }}</span>
                 </div>
@@ -376,8 +555,45 @@
                 </div>
                 <div class="breakdown-row">
                     <span class="breakdown-label">Admin Health</span>
-                    <span
-                        class="breakdown-value">{{ $totalAdmins > 0 ? round(($activeAdmins / $totalAdmins) * 100) : 0 }}%</span>
+                    <span class="breakdown-value">{{ $adminHealth }}%</span>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">Quick Access</div>
+
+                <div class="mini-action-grid">
+                    <a href="{{ route('admin.gaushalas.create') }}" class="mini-action-card">
+                        <div class="mini-action-icon bg-orange">
+                            <i class="bi bi-plus-circle-fill"></i>
+                        </div>
+                        <h6>Create Gaushala</h6>
+                        <p>Add a new gaushala registration quickly.</p>
+                    </a>
+
+                    <a href="{{ route('admin.gaushalas.index') }}" class="mini-action-card">
+                        <div class="mini-action-icon bg-purple">
+                            <i class="bi bi-house-heart-fill"></i>
+                        </div>
+                        <h6>Manage Gaushala</h6>
+                        <p>View and manage all gaushala records.</p>
+                    </a>
+
+                    <a href="{{ route('admin.users.index') }}" class="mini-action-card">
+                        <div class="mini-action-icon bg-blue">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
+                        <h6>Manage Users</h6>
+                        <p>Open user listing and account management.</p>
+                    </a>
+
+                    <a href="{{ route('admin.report-cases.index') }}" class="mini-action-card">
+                        <div class="mini-action-icon bg-red">
+                            <i class="bi bi-clipboard2-pulse-fill"></i>
+                        </div>
+                        <h6>Emergency Cases</h6>
+                        <p>Track rescue and report case activities.</p>
+                    </a>
                 </div>
             </div>
 
@@ -443,7 +659,7 @@
                                     <td>{{ \Carbon\Carbon::parse($report->created_at)->format('d M Y, h:i A') }}</td>
                                     <td class="text-end">
                                         <a href="{{ route('admin.report-cases.show', $report->id) }}"
-                                            class="btn btn-sm btn-outline-dark rounded-pill">
+                                           class="btn btn-sm btn-outline-dark rounded-pill">
                                             View
                                         </a>
                                     </td>
@@ -466,9 +682,10 @@
                     @forelse($statusStats as $item)
                         <div class="col-md-6">
                             <div class="d-flex justify-content-between align-items-center p-3 rounded-4"
-                                style="background:#f8fafc; border:1px solid #e5e7eb;">
-                                <span
-                                    class="fw-semibold text-dark">{{ ucwords(str_replace('_', ' ', $item->status)) }}</span>
+                                 style="background:#f8fafc; border:1px solid #e5e7eb;">
+                                <span class="fw-semibold text-dark">
+                                    {{ ucwords(str_replace('_', ' ', $item->status)) }}
+                                </span>
                                 <span class="badge-status status-{{ $item->status }}">{{ $item->total }}</span>
                             </div>
                         </div>

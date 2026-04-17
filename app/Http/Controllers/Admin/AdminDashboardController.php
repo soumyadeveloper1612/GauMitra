@@ -12,12 +12,22 @@ class AdminDashboardController extends Controller
     public function index()
     {
         $totalUsers = Schema::hasTable('users') ? DB::table('users')->count() : 0;
-        $totalAdmins = Schema::hasTable('admin_users') ? DB::table('admin_users')->count() : 0;
+
+        $totalAdmins = Schema::hasTable('admin_users')
+            ? DB::table('admin_users')->count()
+            : 0;
+
         $activeAdmins = Schema::hasTable('admin_users')
             ? DB::table('admin_users')->where('status', 'active')->count()
             : 0;
-        $totalOtps = Schema::hasTable('login_otps') ? DB::table('login_otps')->count() : 0;
-        $activeSessions = Schema::hasTable('sessions') ? DB::table('sessions')->count() : 0;
+
+        $activeSessions = Schema::hasTable('sessions')
+            ? DB::table('sessions')->count()
+            : 0;
+
+        $totalGaushalas = Schema::hasTable('gaushalas')
+            ? DB::table('gaushalas')->count()
+            : 0;
 
         $totalReports = 0;
         $pendingReports = 0;
@@ -45,26 +55,26 @@ class AdminDashboardController extends Controller
                     'needs_backup',
                     'treatment_started',
                     'shifted_to_gaushala',
-                    'escalated'
+                    'escalated',
                 ])
                 ->count();
 
             $criticalReports = DB::table('emergency_cases')
                 ->where(function ($q) {
                     $q->where('severity', 'critical')
-                      ->orWhere(function ($sub) {
-                          $sub->where('case_type', 'accident')
-                              ->whereIn('status', [
-                                  'reported',
-                                  'alerted',
-                                  'accepted',
-                                  'en_route',
-                                  'reached_site',
-                                  'rescue_in_progress',
-                                  'needs_backup',
-                                  'escalated'
-                              ]);
-                      });
+                        ->orWhere(function ($sub) {
+                            $sub->where('case_type', 'accident')
+                                ->whereIn('status', [
+                                    'reported',
+                                    'alerted',
+                                    'accepted',
+                                    'en_route',
+                                    'reached_site',
+                                    'rescue_in_progress',
+                                    'needs_backup',
+                                    'escalated',
+                                ]);
+                        });
                 })
                 ->count();
 
@@ -113,8 +123,8 @@ class AdminDashboardController extends Controller
             'totalUsers',
             'totalAdmins',
             'activeAdmins',
-            'totalOtps',
             'activeSessions',
+            'totalGaushalas',
             'totalReports',
             'pendingReports',
             'activeRescueReports',
