@@ -64,7 +64,7 @@ Route::middleware(['admin.auth'])->prefix('admin')->name('admin.')->group(functi
     | Report Cases
     |--------------------------------------------------------------------------
     */
-    Route::prefix('report-cases')->name('report-cases.')->group(function () {
+     Route::prefix('report-cases')->name('report-cases.')->group(function () {
         Route::get('/', [AdminReportCaseController::class, 'index'])->name('index');
         Route::get('/{id}', [AdminReportCaseController::class, 'show'])->name('show');
         Route::post('/{id}/status', [AdminReportCaseController::class, 'updateStatus'])->name('update-status');

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmergencyCase;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -31,29 +33,10 @@ class AdminReportCaseController extends Controller
 
     public function index(Request $request)
     {
-        $statuses = [
-            'reported',
-            'alerted',
-            'accepted',
-            'en_route',
-            'reached_site',
-            'rescue_in_progress',
-            'needs_backup',
-            'treatment_started',
-            'shifted_to_gaushala',
-            'escalated',
-            'resolved',
-            'closed',
-            'false_report',
-            'cancelled',
-            'duplicate_case',
-            'unable_to_locate',
-        ];
+        abort_unless(Schema::hasTable('emergency_cases'), 404);
 
-        $responders = User::where('status', 'active')
-            ->select('id', 'name', 'mobile')
-            ->orderBy('name')
-            ->get();
+        $statuses = $this->statuses;
+        $responders = $this->getResponderUsers();
 
         $query = EmergencyCase::query()
             ->leftJoin('users as reporter', 'emergency_cases.reporter_id', '=', 'reporter.id')
@@ -66,7 +49,6 @@ class AdminReportCaseController extends Controller
                 'handler.mobile as handler_mobile'
             );
 
-        // Card filter
         $card = $request->card;
 
         if ($card === 'pending') {
@@ -88,7 +70,6 @@ class AdminReportCaseController extends Controller
             $query->whereIn('emergency_cases.status', ['resolved', 'closed']);
         }
 
-        // Normal filters
         if ($request->filled('keyword')) {
             $keyword = trim($request->keyword);
             $query->where(function ($q) use ($keyword) {
@@ -155,7 +136,7 @@ class AdminReportCaseController extends Controller
             'card',
         ]);
 
-        return view('admin.report_cases.index', compact(
+        return view('admin.report-cases.index', compact(
             'reports',
             'summary',
             'filters',
@@ -163,7 +144,6 @@ class AdminReportCaseController extends Controller
             'responders'
         ));
     }
-
 
     public function show($id)
     {
@@ -383,7 +363,7 @@ class AdminReportCaseController extends Controller
         ?string $oldStatus = null,
         ?string $newStatus = null,
         ?string $notes = null
-        ): void {
+    ): void {
         if (!Schema::hasTable('emergency_case_logs')) {
             return;
         }
