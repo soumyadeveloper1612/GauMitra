@@ -18,7 +18,7 @@ class AdminAuthController extends Controller
         return view('admin.auth.login');
     }
 
- public function login(Request $request)
+    public function login(Request $request)
     {
         $request->validate([
             'user_id' => 'required|string',

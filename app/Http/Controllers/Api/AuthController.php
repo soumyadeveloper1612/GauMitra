@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\LoginOtp;
+use App\Models\UserAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
-use App\Models\UserAddress;
 
 class AuthController extends Controller
 {
@@ -38,21 +38,14 @@ class AuthController extends Controller
                     'status'  => false,
                     'message' => 'User exists but is inactive',
                     'data'    => [
-                        'mobile'         => $request->mobile,
-                        'user_exists'    => true,
-                        'is_new_user'    => false,
-                        'address_exists' => false,
+                        'mobile'      => $request->mobile,
+                        'user_exists' => true,
+                        'is_new_user' => false,
                     ],
                 ], 403);
             }
 
             $isNewUser = $existingUser ? false : true;
-
-            // Check address exists or not
-            $addressExists = false;
-            if ($existingUser) {
-                $addressExists = UserAddress::where('user_id', $existingUser->id)->exists();
-            }
 
             // Demo OTP
             $otp = substr($request->mobile, -4);
@@ -70,7 +63,7 @@ class AuthController extends Controller
                 'user_id'     => $existingUser?->id, // null for new user
                 'mobile'      => $request->mobile,
                 'purpose'     => 'login',
-                'otp_hash'    => $otp, // for testing only
+                'otp_hash'    => $otp, // testing only
                 'expires_at'  => now()->addMinutes(5),
                 'verified_at' => null,
                 'is_used'     => 0,
@@ -83,12 +76,11 @@ class AuthController extends Controller
                 'status'  => true,
                 'message' => 'OTP sent successfully',
                 'data'    => [
-                    'mobile'         => $request->mobile,
-                    'otp'            => $otp,
-                    'expires_at'     => $loginOtp->expires_at,
-                    'user_exists'    => $existingUser ? true : false,
-                    'is_new_user'    => $isNewUser,
-                    'address_exists' => $addressExists,
+                    'mobile'      => $request->mobile,
+                    'otp'         => $otp,
+                    'expires_at'  => $loginOtp->expires_at,
+                    'user_exists' => $existingUser ? true : false,
+                    'is_new_user' => $isNewUser,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -101,7 +93,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
-        
+
     public function verifyOtp(Request $request)
     {
         try {
@@ -175,7 +167,7 @@ class AuthController extends Controller
                     'last_login_at'      => now(),
                 ];
 
-                // Optional: update name for old user if sent and current name is empty
+                // update name for old user if sent and current name is empty
                 if ($request->filled('name') && empty($user->name)) {
                     $updateData['name'] = $request->name;
                 }
@@ -191,15 +183,20 @@ class AuthController extends Controller
                 'verified_at' => now(),
             ]);
 
+            // Address check moved here
+            $addressExists = UserAddress::where('user_id', $user->id)->exists();
+
             $token = $user->createToken('mobile-login-token')->plainTextToken;
 
             return response()->json([
-                'status'      => true,
-                'message'     => $message,
-                'is_new_user' => $isNewUser,
-                'token'       => $token,
-                'token_type'  => 'Bearer',
-                'user'        => $user->fresh(),
+                'status'         => true,
+                'message'        => $message,
+                'is_new_user'    => $isNewUser,
+                'address_exists' => $addressExists,
+                'needs_address'  => !$addressExists,
+                'token'          => $token,
+                'token_type'     => 'Bearer',
+                'user'           => $user->fresh(),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -211,7 +208,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
-    
+
     public function logout(Request $request)
     {
         try {
