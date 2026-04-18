@@ -4,8 +4,9 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
-use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\GaushalaController;
+use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminReportCaseController;
 use App\Http\Controllers\Admin\NewsNoticeController;
 
@@ -26,6 +27,17 @@ Route::get('/admin/login', [AdminAuthController::class, 'showLogin'])->name('adm
 Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.submit');
 Route::get('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 
+   Route::get('/dashboard', [AdminDashboardController::class, 'index'])
+            ->middleware('admin.permission:dashboard.view')
+            ->name('dashboard');
+
+        Route::middleware('admin.permission:admins.manage')->group(function () {
+            Route::resource('admins', AdminUserController::class)->except(['show']);
+        });
+
+        Route::middleware('admin.permission:roles.manage')->group(function () {
+            Route::resource('roles', RoleController::class)->except(['show']);
+        });
 /*
 |--------------------------------------------------------------------------
 | Admin Protected Routes
@@ -46,10 +58,10 @@ Route::middleware(['admin.auth'])->prefix('admin')->name('admin.')->group(functi
     |--------------------------------------------------------------------------
     */
     Route::prefix('users')->name('users.')->group(function () {
-        Route::get('/', [AdminUserController::class, 'index'])->name('index');
-        Route::get('/export', [AdminUserController::class, 'export'])->name('export');
-        Route::get('/{id}', [AdminUserController::class, 'show'])->name('show');
-        Route::get('/{id}/addresses', [AdminUserController::class, 'addresses'])->name('addresses');
+        Route::get('/', [UserController::class, 'index'])->name('index');
+        Route::get('/export', [UserController::class, 'export'])->name('export');
+        Route::get('/{id}', [UserController::class, 'show'])->name('show');
+        Route::get('/{id}/addresses', [UserController::class, 'addresses'])->name('addresses');
     });
 
     /*

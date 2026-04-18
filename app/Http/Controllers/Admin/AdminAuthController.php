@@ -50,6 +50,7 @@ class AdminAuthController extends Controller
             'admin_id' => $admin->id,
             'admin_name' => $admin->name,
             'admin_user_id' => $admin->user_id,
+            'admin_is_super_admin' => (bool) ($admin->is_super_admin ?? false),
         ]);
 
         return redirect()
@@ -57,13 +58,20 @@ class AdminAuthController extends Controller
             ->with('success', 'Login successful');
     }
 
-
     public function logout(Request $request)
     {
-        $request->session()->forget(['admin_id', 'admin_name', 'admin_user_id']);
+        $request->session()->forget([
+            'admin_id',
+            'admin_name',
+            'admin_user_id',
+            'admin_is_super_admin',
+        ]);
+
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('admin.login')->with('success', 'Logged out successfully');
+        return redirect()
+            ->route('admin.login')
+            ->with('success', 'Logged out successfully');
     }
 }

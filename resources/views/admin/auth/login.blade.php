@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +7,6 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
@@ -64,7 +62,7 @@
             opacity: 0.95;
         }
 
-        .login-left .badge {
+        .login-left .badge-box {
             display: inline-block;
             padding: 10px 16px;
             background: rgba(255, 255, 255, 0.16);
@@ -89,16 +87,34 @@
             max-width: 380px;
         }
 
+        .logo-box {
+            text-align: center;
+            margin-bottom: 18px;
+        }
+
+        .login-logo {
+            width: 90px;
+            height: 90px;
+            object-fit: contain;
+            border-radius: 50%;
+            background: #fff7ed;
+            padding: 10px;
+            box-shadow: 0 8px 20px rgba(234, 88, 12, 0.15);
+            border: 1px solid #fed7aa;
+        }
+
         .login-box h2 {
             font-size: 30px;
             color: #1f2937;
             margin-bottom: 8px;
+            text-align: center;
         }
 
         .login-box .subtitle {
             color: #6b7280;
             margin-bottom: 28px;
             font-size: 14px;
+            text-align: center;
         }
 
         .form-group {
@@ -166,23 +182,7 @@
             font-size: 13px;
         }
 
-        .logo-box {
-    text-align: center;
-    margin-bottom: 18px;
-}
-
-.login-logo {
-    width: 90px;
-    height: 90px;
-    object-fit: contain;
-    border-radius: 50%;
-    background: #fff7ed;
-    padding: 10px;
-    box-shadow: 0 8px 20px rgba(234, 88, 12, 0.15);
-    border: 1px solid #fed7aa;
-}
-
-        @media(max-width: 900px) {
+        @media (max-width: 900px) {
             .login-wrapper {
                 grid-template-columns: 1fr;
             }
@@ -197,15 +197,14 @@
         }
     </style>
 </head>
-
 <body>
 
     <div class="login-wrapper">
         <div class="login-left">
-            <div class="badge">GauMitra Secure Admin Panel</div>
+            <div class="badge-box">GauMitra Secure Admin Panel</div>
             <h1>Welcome Back to GauMitra Admin</h1>
             <p>
-                Manage users, reports, and system activity from one secure dashboard.
+                Manage users, reports, gaushala data, roles, and system activity from one secure dashboard.
                 Sign in with your admin credentials to continue.
             </p>
         </div>
@@ -215,6 +214,7 @@
                 <div class="logo-box">
                     <img src="{{ asset('image/logo.png') }}" alt="GauMitra Logo" class="login-logo">
                 </div>
+
                 <h2>Admin Login</h2>
                 <p class="subtitle">Enter your credentials to access the dashboard</p>
 
@@ -224,8 +224,13 @@
                     <div class="form-group">
                         <label>User ID</label>
                         <div class="input-box">
-                            <input type="text" name="user_id" value="{{ old('user_id') }}"
-                                placeholder="Enter your user ID">
+                            <input
+                                type="text"
+                                name="user_id"
+                                value="{{ old('user_id') }}"
+                                placeholder="Enter your user ID"
+                                autocomplete="username"
+                            >
                         </div>
                         @error('user_id')
                             <div class="error-text">{{ $message }}</div>
@@ -235,7 +240,12 @@
                     <div class="form-group">
                         <label>Password</label>
                         <div class="input-box">
-                            <input type="password" name="password" placeholder="Enter your password">
+                            <input
+                                type="password"
+                                name="password"
+                                placeholder="Enter your password"
+                                autocomplete="current-password"
+                            >
                         </div>
                         @error('password')
                             <div class="error-text">{{ $message }}</div>
@@ -286,5 +296,4 @@
     @endif
 
 </body>
-
 </html>
