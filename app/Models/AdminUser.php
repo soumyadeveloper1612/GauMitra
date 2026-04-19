@@ -12,6 +12,7 @@ class AdminUser extends Model
     protected $fillable = [
         'name',
         'user_id',
+        'email',
         'password',
         'status',
         'is_super_admin',
@@ -36,7 +37,10 @@ class AdminUser extends Model
         $this->loadMissing('roles.permissions');
 
         return $this->roles
-            ->flatMap(fn ($role) => $role->permissions)
+            ->where('status', 'active')
+            ->flatMap(function ($role) {
+                return $role->permissions->where('status', 'active');
+            })
             ->unique('id')
             ->values();
     }
@@ -49,7 +53,9 @@ class AdminUser extends Model
 
         $this->loadMissing('roles');
 
-        return $this->roles->contains('name', $roleName);
+        return $this->roles
+            ->where('status', 'active')
+            ->contains('name', $roleName);
     }
 
     public function hasPermission(string $permissionName): bool

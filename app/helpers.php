@@ -6,18 +6,19 @@ if (!function_exists('admin_user')) {
     function admin_user(): ?AdminUser
     {
         static $admin = null;
+        static $loaded = false;
 
-        if ($admin !== null) {
+        if ($loaded) {
             return $admin;
         }
 
-        $adminId = session('admin_id');
+        $loaded = true;
 
-        if (!$adminId) {
+        if (!session()->has('admin_id')) {
             return null;
         }
 
-        $admin = AdminUser::with('roles.permissions')->find($adminId);
+        $admin = AdminUser::with('roles.permissions')->find(session('admin_id'));
 
         return $admin;
     }
@@ -28,15 +29,19 @@ if (!function_exists('admin_can')) {
     {
         $admin = admin_user();
 
-        return $admin ? $admin->hasPermission($permission) : false;
+        if (!$admin) {
+            return false;
+        }
+
+        return $admin->hasPermission($permission);
     }
 }
 
-if (!function_exists('admin_has_role')) {
-    function admin_has_role(string $role): bool
+if (!function_exists('is_super_admin')) {
+    function is_super_admin(): bool
     {
         $admin = admin_user();
 
-        return $admin ? $admin->hasRole($role) : false;
+        return $admin ? (bool) $admin->is_super_admin : false;
     }
 }

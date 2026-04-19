@@ -10,8 +10,9 @@ class AdminPermission
 {
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        if (!function_exists('admin_can') || !admin_can($permission)) {
-            return redirect()->route('admin.dashboard')->with('error', 'You do not have permission to access this page.');
+        if (!admin_can($permission)) {
+            return redirect()->route(is_super_admin() ? 'superadmin.dashboard' : 'admin.dashboard')
+                ->with('error', 'You do not have permission to access this page.');
         }
 
         return $next($request);

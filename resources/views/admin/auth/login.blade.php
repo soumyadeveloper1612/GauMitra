@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login - GauMitra</title>
+    <title>Admin / Super Admin Login - GauMitra</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -201,11 +201,11 @@
 
     <div class="login-wrapper">
         <div class="login-left">
-            <div class="badge-box">GauMitra Secure Admin Panel</div>
-            <h1>Welcome Back to GauMitra Admin</h1>
+            <div class="badge-box">GauMitra Secure Control Panel</div>
+            <h1>Admin & Super Admin Login</h1>
             <p>
-                Manage users, reports, gaushala data, roles, and system activity from one secure dashboard.
-                Sign in with your admin credentials to continue.
+                Super Admin can access all menus and manage admin permissions.
+                Admin users can access only assigned menus based on their role.
             </p>
         </div>
 
@@ -215,8 +215,8 @@
                     <img src="{{ asset('image/logo.png') }}" alt="GauMitra Logo" class="login-logo">
                 </div>
 
-                <h2>Admin Login</h2>
-                <p class="subtitle">Enter your credentials to access the dashboard</p>
+                <h2>Secure Login</h2>
+                <p class="subtitle">Login with your User ID and password</p>
 
                 <form method="POST" action="{{ route('admin.login.submit') }}">
                     @csrf

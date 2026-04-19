@@ -12,7 +12,9 @@ class AdminAuthController extends Controller
     public function showLogin()
     {
         if (session()->has('admin_id')) {
-            return redirect()->route('admin.dashboard');
+            return redirect()->route(
+                session('admin_is_super_admin') ? 'superadmin.dashboard' : 'admin.dashboard'
+            );
         }
 
         return view('admin.auth.login');
@@ -33,15 +35,11 @@ class AdminAuthController extends Controller
             ->first();
 
         if (!$admin) {
-            return back()
-                ->with('error', 'User not found or inactive')
-                ->withInput();
+            return back()->with('error', 'User not found or inactive')->withInput();
         }
 
         if (!Hash::check($request->password, $admin->password)) {
-            return back()
-                ->with('error', 'Invalid password')
-                ->withInput();
+            return back()->with('error', 'Invalid password')->withInput();
         }
 
         $request->session()->regenerate();
@@ -50,12 +48,12 @@ class AdminAuthController extends Controller
             'admin_id' => $admin->id,
             'admin_name' => $admin->name,
             'admin_user_id' => $admin->user_id,
-            'admin_is_super_admin' => (bool) ($admin->is_super_admin ?? false),
+            'admin_is_super_admin' => (bool) $admin->is_super_admin,
         ]);
 
-        return redirect()
-            ->route('admin.dashboard')
-            ->with('success', 'Login successful');
+        return redirect()->route(
+            $admin->is_super_admin ? 'superadmin.dashboard' : 'admin.dashboard'
+        )->with('success', 'Login successful');
     }
 
     public function logout(Request $request)
@@ -70,8 +68,6 @@ class AdminAuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()
-            ->route('admin.login')
-            ->with('success', 'Logged out successfully');
+        return redirect()->route('admin.login')->with('success', 'Logged out successfully');
     }
 }

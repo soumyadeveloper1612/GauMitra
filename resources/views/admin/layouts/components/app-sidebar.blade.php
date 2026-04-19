@@ -3,6 +3,7 @@
     $adminMenuOpen = request()->routeIs('admin.admins.*') || request()->routeIs('admin.roles.*');
     $gaushalaMenuOpen = request()->routeIs('admin.gaushalas.*');
     $newsNoticeMenuOpen = request()->routeIs('admin.news-notices.*');
+    $dashboardUrl = is_super_admin() ? route('superadmin.dashboard') : route('admin.dashboard');
 @endphp
 
 <aside class="sidebar" id="sidebar">
@@ -12,7 +13,7 @@
         </div>
         <div class="brand-text">
             <h4>GauMitra</h4>
-            <p>Admin Control Panel</p>
+            <p>{{ is_super_admin() ? 'Super Admin Panel' : 'Admin Panel' }}</p>
         </div>
     </div>
 
@@ -21,10 +22,10 @@
     <ul class="sidebar-menu">
         @if(admin_can('dashboard.view'))
             <li class="menu-item">
-                <a href="{{ route('admin.dashboard') }}"
-                   class="menu-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
+                <a href="{{ $dashboardUrl }}"
+                   class="menu-link {{ request()->routeIs('admin.dashboard') || request()->routeIs('superadmin.dashboard') ? 'active' : '' }}">
                     <span class="nav-icon"><i class="bi bi-grid-fill"></i></span>
-                    <span class="nav-text">Dashboard</span>
+                    <span class="nav-text">{{ is_super_admin() ? 'Super Dashboard' : 'Dashboard' }}</span>
                 </a>
             </li>
         @endif
@@ -123,7 +124,7 @@
             </li>
         @endif
 
-        @if(admin_can('admins.manage') || admin_can('roles.manage'))
+        @if(is_super_admin())
             <li class="menu-item has-submenu {{ $adminMenuOpen ? 'open' : '' }}">
                 <a href="javascript:void(0)" class="menu-link submenu-toggle {{ $adminMenuOpen ? 'active' : '' }}">
                     <span class="nav-icon"><i class="bi bi-shield-lock-fill"></i></span>
@@ -132,25 +133,21 @@
                 </a>
 
                 <ul class="submenu" style="{{ $adminMenuOpen ? 'display:block;' : 'display:none;' }}">
-                    @if(admin_can('admins.manage'))
-                        <li>
-                            <a href="{{ route('admin.admins.index') }}"
-                               class="{{ request()->routeIs('admin.admins.*') ? 'active' : '' }}">
-                                <span class="submenu-dot"></span>
-                                <span>All Admins</span>
-                            </a>
-                        </li>
-                    @endif
+                    <li>
+                        <a href="{{ route('admin.admins.index') }}"
+                           class="{{ request()->routeIs('admin.admins.*') ? 'active' : '' }}">
+                            <span class="submenu-dot"></span>
+                            <span>All Admins</span>
+                        </a>
+                    </li>
 
-                    @if(admin_can('roles.manage'))
-                        <li>
-                            <a href="{{ route('admin.roles.index') }}"
-                               class="{{ request()->routeIs('admin.roles.*') ? 'active' : '' }}">
-                                <span class="submenu-dot"></span>
-                                <span>Roles & Permissions</span>
-                            </a>
-                        </li>
-                    @endif
+                    <li>
+                        <a href="{{ route('admin.roles.index') }}"
+                           class="{{ request()->routeIs('admin.roles.*') ? 'active' : '' }}">
+                            <span class="submenu-dot"></span>
+                            <span>Roles & Permissions</span>
+                        </a>
+                    </li>
                 </ul>
             </li>
         @endif
