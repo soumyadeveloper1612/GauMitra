@@ -30,7 +30,9 @@ class AdminAuthController extends Controller
             'password.required' => 'Password is required',
         ]);
 
-        $admin = AdminUser::where('user_id', $request->user_id)
+        $userId = trim($request->user_id);
+
+        $admin = AdminUser::where('user_id', $userId)
             ->where('status', 'active')
             ->first();
 
