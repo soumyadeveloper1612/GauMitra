@@ -10,26 +10,6 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\GaushalaController;
 use App\Http\Controllers\Admin\AdminReportCaseController;
 use App\Http\Controllers\Admin\NewsNoticeController;
-use App\Models\AdminUser;
-use Illuminate\Support\Facades\Hash;
-
-
-Route::get('/fix-superadmin-password', function () {
-    $admin = AdminUser::where('user_id', 'superadmin')->first();
-
-    if (!$admin) {
-        return 'Super admin not found';
-    }
-
-    $admin->update([
-        'name' => 'Super Admin',
-        'password' => Hash::make('Super@12345'),
-        'status' => 'active',
-        'is_super_admin' => 1,
-    ]);
-
-    return 'Super admin password reset successful. User ID: superadmin | Password: Super@12345';
-});
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
