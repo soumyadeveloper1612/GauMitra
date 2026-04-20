@@ -22,9 +22,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware(['admin.auth'])->group(function () {
         Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
 
+      
+
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])
-            ->middleware('admin.permission:dashboard.view')
-            ->name('dashboard');
+        ->name('dashboard');
 
         Route::prefix('users')->name('users.')->group(function () {
             Route::get('/', [UserController::class, 'index'])
