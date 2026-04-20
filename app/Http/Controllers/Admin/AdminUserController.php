@@ -2,117 +2,118 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Exports\UsersExport;
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\AdminUser;
+use App\Models\Role;
 use Illuminate\Http\Request;
-use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
-class UserController extends Controller
+class AdminUserController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $users = $this->filteredUsersQuery($request)
-            ->latest()
-            ->get();
+        $admins = AdminUser::with('roles')->latest()->paginate(10);
 
-        $stats = [
-            'totalUsers'       => User::count(),
-            'activeUsers'      => User::where('status', 'active')->count(),
-            'inactiveUsers'    => User::where('status', 'inactive')->count(),
-            'verifiedUsers'    => User::whereNotNull('mobile_verified_at')->count(),
-            'notVerifiedUsers' => User::whereNull('mobile_verified_at')->count(),
-            'withAddressUsers' => User::has('addresses')->count(),
-            'filteredUsers'    => $users->count(),
-        ];
-
-        return view('admin.users.index', compact('users', 'stats'));
+        return view('admin.admins.index', compact('admins'));
     }
 
-    public function show($id)
+    public function create()
     {
-        $user = User::with([
-            'addresses' => function ($query) {
-                $query->latest();
-            },
-            'loginOtps' => function ($query) {
-                $query->latest();
-            }
-        ])->findOrFail($id);
+        $roles = Role::where('status', 'active')->orderBy('label')->get();
 
-        return view('admin.users.show', compact('user'));
+        return view('admin.admins.create', compact('roles'));
     }
 
-    public function export(Request $request)
+    public function store(Request $request)
     {
-        $users = $this->filteredUsersQuery($request)
-            ->latest()
-            ->get();
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'user_id' => 'required|string|max:100|unique:admin_users,user_id',
+            'password' => 'required|string|min:6',
+            'status' => 'required|in:active,inactive',
+            'roles' => 'nullable|array',
+            'roles.*' => 'exists:roles,id',
+        ]);
 
-        $fileName = 'users_' . now()->format('Y_m_d_H_i_s') . '.xlsx';
+        DB::transaction(function () use ($request) {
+            $admin = AdminUser::create([
+                'name' => $request->name,
+                'user_id' => $request->user_id,
+                'password' => Hash::make($request->password),
+                'status' => $request->status,
+                'is_super_admin' => admin_user()?->is_super_admin ? (bool)$request->is_super_admin : false,
+            ]);
 
-        return Excel::download(new UsersExport($users), $fileName);
-    }
-
-    public function addresses($id)
-    {
-        $user = User::with([
-            'addresses' => function ($query) {
-                $query->latest();
-            }
-        ])->findOrFail($id);
-
-        $addresses = $user->addresses->map(function ($address) {
-            return [
-                'full_address'    => $address->full_address,
-                'street'          => $address->street,
-                'village'         => $address->village,
-                'police_station'  => $address->police_station,
-                'city'            => $address->city,
-                'district'        => $address->district,
-                'state'           => $address->state,
-                'pincode'         => $address->pincode,
-                'area_name'       => $address->area_name,
-                'latitude'        => $address->latitude,
-                'longitude'       => $address->longitude,
-                'google_place_id' => $address->google_place_id,
-                'plus_code'       => $address->plus_code,
-                'created_at'      => optional($address->created_at)->format('d M Y, h:i A'),
-            ];
+            $admin->roles()->sync($request->roles ?? []);
         });
 
-        return response()->json([
-            'status'    => true,
-            'user'      => [
-                'id'     => $user->id,
-                'name'   => $user->name,
-                'mobile' => $user->mobile,
-            ],
-            'addresses' => $addresses,
-        ]);
+        return redirect()->route('admin.admins.index')->with('success', 'Admin created successfully.');
     }
 
-    private function filteredUsersQuery(Request $request)
+    public function edit(AdminUser $admin)
     {
-        return User::with(['latestAddress'])
-            ->withCount('addresses')
-            ->when($request->filled('search'), function ($query) use ($request) {
-                $search = trim($request->search);
+        $roles = Role::where('status', 'active')->orderBy('label')->get();
+        $admin->load('roles');
 
-                $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('mobile', 'like', "%{$search}%")
-                        ->orWhere('status', 'like', "%{$search}%");
-                });
-            })
-            ->when($request->filled('status_filter'), function ($query) use ($request) {
-                $query->where('status', $request->status_filter);
-            })
-            ->when($request->verified_filter === 'verified', function ($query) {
-                $query->whereNotNull('mobile_verified_at');
-            })
-            ->when($request->verified_filter === 'not_verified', function ($query) {
-                $query->whereNull('mobile_verified_at');
-            });
+        return view('admin.admins.edit', compact('admin', 'roles'));
+    }
+
+    public function update(Request $request, AdminUser $admin)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'user_id' => ['required', 'string', 'max:100', Rule::unique('admin_users', 'user_id')->ignore($admin->id)],
+            'password' => 'nullable|string|min:6',
+            'status' => 'required|in:active,inactive',
+            'roles' => 'nullable|array',
+            'roles.*' => 'exists:roles,id',
+        ]);
+
+        if ($admin->id == session('admin_id') && $request->status === 'inactive') {
+            return back()->with('error', 'You cannot deactivate your own account.');
+        }
+
+        if ($admin->is_super_admin && !admin_user()?->is_super_admin) {
+            return back()->with('error', 'Only super admin can edit another super admin.');
+        }
+
+        DB::transaction(function () use ($request, $admin) {
+            $data = [
+                'name' => $request->name,
+                'user_id' => $request->user_id,
+                'status' => $request->status,
+            ];
+
+            if ($request->filled('password')) {
+                $data['password'] = Hash::make($request->password);
+            }
+
+            if (admin_user()?->is_super_admin) {
+                $data['is_super_admin'] = (bool)$request->is_super_admin;
+            }
+
+            $admin->update($data);
+            $admin->roles()->sync($request->roles ?? []);
+        });
+
+        return redirect()->route('admin.admins.index')->with('success', 'Admin updated successfully.');
+    }
+
+    public function destroy(AdminUser $admin)
+    {
+        if ($admin->id == session('admin_id')) {
+            return back()->with('error', 'You cannot delete your own account.');
+        }
+
+        if ($admin->is_super_admin) {
+            return back()->with('error', 'Super admin cannot be deleted from here.');
+        }
+
+        $admin->roles()->detach();
+        $admin->delete();
+
+        return redirect()->route('admin.admins.index')->with('success', 'Admin deleted successfully.');
     }
 }

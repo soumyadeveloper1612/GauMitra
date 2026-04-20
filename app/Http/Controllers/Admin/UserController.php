@@ -8,7 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 
-class AdminUserController extends Controller
+class UserController extends Controller
 {
     public function index(Request $request)
     {
@@ -17,13 +17,13 @@ class AdminUserController extends Controller
             ->get();
 
         $stats = [
-            'totalUsers'      => User::count(),
-            'activeUsers'     => User::where('status', 'active')->count(),
-            'inactiveUsers'   => User::where('status', 'inactive')->count(),
-            'verifiedUsers'   => User::whereNotNull('mobile_verified_at')->count(),
-            'notVerifiedUsers'=> User::whereNull('mobile_verified_at')->count(),
-            'withAddressUsers'=> User::has('addresses')->count(),
-            'filteredUsers'   => $users->count(),
+            'totalUsers'       => User::count(),
+            'activeUsers'      => User::where('status', 'active')->count(),
+            'inactiveUsers'    => User::where('status', 'inactive')->count(),
+            'verifiedUsers'    => User::whereNotNull('mobile_verified_at')->count(),
+            'notVerifiedUsers' => User::whereNull('mobile_verified_at')->count(),
+            'withAddressUsers' => User::has('addresses')->count(),
+            'filteredUsers'    => $users->count(),
         ];
 
         return view('admin.users.index', compact('users', 'stats'));
