@@ -4,9 +4,9 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
-use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminUserController;   // for admin management
 use App\Http\Controllers\Admin\RoleController;
-use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\UserController;        // for app users listing/details
 use App\Http\Controllers\Admin\GaushalaController;
 use App\Http\Controllers\Admin\AdminReportCaseController;
 use App\Http\Controllers\Admin\NewsNoticeController;
@@ -24,16 +24,34 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 
+        /*
+        |--------------------------------------------------------------------------
+        | App Users
+        |--------------------------------------------------------------------------
+        */
         Route::prefix('users')->name('users.')->group(function () {
             Route::get('/', [UserController::class, 'index'])
                 ->middleware('admin.permission:users.view')
                 ->name('index');
+
+            Route::get('/export', [UserController::class, 'export'])
+                ->middleware('admin.permission:users.view')
+                ->name('export');
+
+            Route::get('/{id}/addresses', [UserController::class, 'addresses'])
+                ->middleware('admin.permission:users.view')
+                ->name('addresses');
 
             Route::get('/{id}', [UserController::class, 'show'])
                 ->middleware('admin.permission:users.view')
                 ->name('show');
         });
 
+        /*
+        |--------------------------------------------------------------------------
+        | Gaushala
+        |--------------------------------------------------------------------------
+        */
         Route::prefix('gaushalas')->name('gaushalas.')->group(function () {
             Route::get('/', [GaushalaController::class, 'index'])
                 ->middleware('admin.permission:gaushala.view')
@@ -52,6 +70,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('show');
         });
 
+        /*
+        |--------------------------------------------------------------------------
+        | Report Cases
+        |--------------------------------------------------------------------------
+        */
         Route::prefix('report-cases')->name('report-cases.')->group(function () {
             Route::get('/', [AdminReportCaseController::class, 'index'])
                 ->middleware('admin.permission:report_cases.view')
@@ -70,6 +93,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('assign-handler');
         });
 
+        /*
+        |--------------------------------------------------------------------------
+        | News & Notices
+        |--------------------------------------------------------------------------
+        */
         Route::prefix('news-notices')->name('news-notices.')->group(function () {
             Route::get('/', [NewsNoticeController::class, 'index'])
                 ->middleware('admin.permission:news_notice.view')
@@ -92,6 +120,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('destroy');
         });
 
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Management
+        |--------------------------------------------------------------------------
+        */
         Route::prefix('admins')->name('admins.')->middleware('super.admin')->group(function () {
             Route::get('/', [AdminUserController::class, 'index'])->name('index');
             Route::get('/create', [AdminUserController::class, 'create'])->name('create');

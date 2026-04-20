@@ -24,6 +24,13 @@ class LoginOtp extends Model
         'user_agent',
     ];
 
+    protected $casts = [
+        'expires_at'  => 'datetime',
+        'verified_at' => 'datetime',
+        'is_used'     => 'boolean',
+    ];
+
+
     public function user()
     {
         return $this->belongsTo(User::class);
