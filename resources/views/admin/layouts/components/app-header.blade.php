@@ -30,9 +30,12 @@
             </div>
         </div>
 
-        <a href="{{ route('admin.logout') }}" class="logout-btn">
-            <i class="bi bi-box-arrow-right"></i>
-            <span>Logout</span>
-        </a>
+        <form action="{{ route('admin.logout') }}" method="POST" class="logout-form">
+            @csrf
+            <button type="submit" class="logout-btn">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Logout</span>
+            </button>
+        </form>
     </div>
 </header>
