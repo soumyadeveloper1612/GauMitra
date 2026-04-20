@@ -22,9 +22,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware(['admin.auth'])->group(function () {
         Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
 
-
-        Route::get('/dashboard', [AdminDashboardController::class, 'index'])
-        ->name('dashboard');
+        Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 
         Route::prefix('users')->name('users.')->group(function () {
             Route::get('/', [UserController::class, 'index'])
@@ -35,11 +33,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->middleware('admin.permission:users.view')
                 ->name('show');
         });
-
-
-Route::prefix('super-admin')->name('superadmin.')->middleware(['admin.auth'])->group(function () {
-    Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
-});
 
         Route::prefix('gaushalas')->name('gaushalas.')->group(function () {
             Route::get('/', [GaushalaController::class, 'index'])
