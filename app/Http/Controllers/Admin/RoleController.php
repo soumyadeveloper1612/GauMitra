@@ -8,8 +8,10 @@ use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Database\QueryException;
 
 class RoleController extends Controller
 {
@@ -45,33 +47,76 @@ class RoleController extends Controller
             'status' => 'required|in:active,inactive',
             'permissions' => 'nullable|array',
             'permissions.*' => 'integer|exists:permissions,id',
+        ], [
+            'label.required' => 'Role label is required.',
+            'name.required' => 'Role code is required.',
+            'name.unique' => 'This role code already exists.',
+            'status.required' => 'Please select a status.',
         ]);
 
-        try {
-            DB::transaction(function () use ($validated) {
-                $role = Role::create([
-                    'label' => $validated['label'],
-                    'name' => $validated['name'],
-                    'description' => $validated['description'] ?? null,
-                    'status' => $validated['status'],
-                ]);
+        if (!Schema::hasTable('roles')) {
+            return back()->withInput()->with('error', 'The roles table does not exist.');
+        }
 
-                $role->permissions()->sync($validated['permissions'] ?? []);
-            });
+        if (!Schema::hasTable('permissions')) {
+            return back()->withInput()->with('error', 'The permissions table does not exist.');
+        }
+
+        if (!Schema::hasTable('permission_role')) {
+            return back()->withInput()->with('error', 'The permission_role pivot table does not exist.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $role = Role::create([
+                'label' => $validated['label'],
+                'name' => $validated['name'],
+                'description' => $validated['description'] ?? null,
+                'status' => $validated['status'],
+            ]);
+
+            $role->permissions()->sync($validated['permissions'] ?? []);
+
+            DB::commit();
 
             return redirect()
                 ->route('admin.roles.index')
                 ->with('success', 'Role created successfully.');
+        } catch (QueryException $e) {
+            DB::rollBack();
+
+            Log::error('Role store database error', [
+                'request_data' => $request->except(['_token']),
+                'sql_message'  => $e->getMessage(),
+                'line'         => $e->getLine(),
+                'file'         => $e->getFile(),
+            ]);
+
+            $message = 'Database error while creating role.';
+
+            if (str_contains(strtolower($e->getMessage()), 'duplicate')) {
+                $message = 'Role code already exists. Please use another role code.';
+            } elseif (str_contains(strtolower($e->getMessage()), 'permission_role')) {
+                $message = 'permission_role pivot table is missing or has wrong columns.';
+            } elseif (str_contains(strtolower($e->getMessage()), 'roles')) {
+                $message = 'roles table structure is not matching the code.';
+            }
+
+            return back()->withInput()->with('error', $message);
         } catch (\Throwable $e) {
+            DB::rollBack();
+
             Log::error('Role store failed', [
-                'message' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile(),
+                'request_data' => $request->except(['_token']),
+                'message'      => $e->getMessage(),
+                'line'         => $e->getLine(),
+                'file'         => $e->getFile(),
             ]);
 
             return back()
                 ->withInput()
-                ->with('error', 'Role creation failed. Please check pivot tables and role uniqueness.');
+                ->with('error', 'Role creation failed. Please check roles table, permissions table, and permission_role pivot table.');
         }
     }
 
@@ -106,27 +151,35 @@ class RoleController extends Controller
             'permissions.*' => 'integer|exists:permissions,id',
         ]);
 
-        try {
-            DB::transaction(function () use ($validated, $role) {
-                $role->update([
-                    'label' => $validated['label'],
-                    'name' => $validated['name'],
-                    'description' => $validated['description'] ?? null,
-                    'status' => $validated['status'],
-                ]);
+        if (!Schema::hasTable('permission_role')) {
+            return back()->withInput()->with('error', 'The permission_role pivot table does not exist.');
+        }
 
-                $role->permissions()->sync($validated['permissions'] ?? []);
-            });
+        try {
+            DB::beginTransaction();
+
+            $role->update([
+                'label' => $validated['label'],
+                'name' => $validated['name'],
+                'description' => $validated['description'] ?? null,
+                'status' => $validated['status'],
+            ]);
+
+            $role->permissions()->sync($validated['permissions'] ?? []);
+
+            DB::commit();
 
             return redirect()
                 ->route('admin.roles.index')
                 ->with('success', 'Role updated successfully.');
         } catch (\Throwable $e) {
+            DB::rollBack();
+
             Log::error('Role update failed', [
                 'role_id' => $role->id,
                 'message' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ]);
 
             return back()
@@ -142,16 +195,20 @@ class RoleController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($role) {
-                $role->admins()->detach();
-                $role->permissions()->detach();
-                $role->delete();
-            });
+            DB::beginTransaction();
+
+            $role->admins()->detach();
+            $role->permissions()->detach();
+            $role->delete();
+
+            DB::commit();
 
             return redirect()
                 ->route('admin.roles.index')
                 ->with('success', 'Role deleted successfully.');
         } catch (\Throwable $e) {
+            DB::rollBack();
+
             Log::error('Role delete failed', [
                 'role_id' => $role->id,
                 'message' => $e->getMessage(),

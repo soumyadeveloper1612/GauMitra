@@ -8,18 +8,42 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('admin_role_user', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('admin_user_id')->constrained('admin_users')->cascadeOnDelete();
-            $table->foreignId('role_id')->constrained('roles')->cascadeOnDelete();
-            $table->timestamps();
+        if (!Schema::hasTable('admin_role_user')) {
+            Schema::create('admin_role_user', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('admin_user_id');
+                $table->unsignedBigInteger('role_id');
+                $table->timestamps();
 
-            $table->unique(['admin_user_id', 'role_id']);
-        });
+                $table->unique(['admin_user_id', 'role_id']);
+
+                $table->foreign('admin_user_id')
+                    ->references('id')
+                    ->on('admin_users')
+                    ->onDelete('cascade');
+
+                $table->foreign('role_id')
+                    ->references('id')
+                    ->on('roles')
+                    ->onDelete('cascade');
+            });
+        } else {
+            if (!Schema::hasColumn('admin_role_user', 'created_at')) {
+                Schema::table('admin_role_user', function (Blueprint $table) {
+                    $table->timestamp('created_at')->nullable();
+                });
+            }
+
+            if (!Schema::hasColumn('admin_role_user', 'updated_at')) {
+                Schema::table('admin_role_user', function (Blueprint $table) {
+                    $table->timestamp('updated_at')->nullable();
+                });
+            }
+        }
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('admin_role_user');
+        // keep safe for production
     }
 };

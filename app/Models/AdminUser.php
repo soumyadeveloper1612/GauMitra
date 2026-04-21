@@ -28,8 +28,12 @@ class AdminUser extends Model
 
     public function roles()
     {
-        return $this->belongsToMany(Role::class, 'admin_role_user', 'admin_user_id', 'role_id')
-            ->withTimestamps();
+        return $this->belongsToMany(
+            Role::class,
+            'admin_role_user',
+            'admin_user_id',
+            'role_id'
+        )->withTimestamps();
     }
 
     public function getAllPermissionsAttribute(): Collection
