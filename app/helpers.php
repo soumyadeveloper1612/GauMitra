@@ -2,46 +2,45 @@
 
 use App\Models\AdminUser;
 
-if (!function_exists('admin_user')) {
-    function admin_user(): ?AdminUser
+if (!function_exists('current_admin')) {
+    function current_admin(): ?AdminUser
     {
         static $admin = null;
-        static $loaded = false;
 
-        if ($loaded) {
+        if ($admin !== null) {
             return $admin;
         }
 
-        $loaded = true;
+        $adminId = session('admin_id');
 
-        if (!session()->has('admin_id')) {
+        if (!$adminId) {
             return null;
         }
 
-        $admin = AdminUser::with('roles.permissions')->find(session('admin_id'));
+        $admin = AdminUser::with('roles.permissions')->find($adminId);
 
         return $admin;
-    }
-}
-
-if (!function_exists('admin_can')) {
-    function admin_can(string $permission): bool
-    {
-        $admin = admin_user();
-
-        if (!$admin) {
-            return false;
-        }
-
-        return $admin->hasPermission($permission);
     }
 }
 
 if (!function_exists('is_super_admin')) {
     function is_super_admin(): bool
     {
-        $admin = admin_user();
+        $admin = current_admin();
 
-        return $admin ? (bool) $admin->is_super_admin : false;
+        return $admin?->is_super_admin === true;
+    }
+}
+
+if (!function_exists('admin_can')) {
+    function admin_can(string $permission): bool
+    {
+        $admin = current_admin();
+
+        if (!$admin) {
+            return false;
+        }
+
+        return $admin->hasPermission($permission);
     }
 }
