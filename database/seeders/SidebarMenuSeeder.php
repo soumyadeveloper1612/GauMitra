@@ -24,7 +24,7 @@ class SidebarMenuSeeder extends Seeder
             ]
         );
 
-        $users = SidebarMenu::updateOrCreate(
+        SidebarMenu::updateOrCreate(
             ['menu_key' => 'users'],
             [
                 'title' => 'Users',
@@ -198,51 +198,6 @@ class SidebarMenuSeeder extends Seeder
                 'route_pattern' => 'admin.roles.*',
                 'icon' => null,
                 'parent_id' => $adminManagement->id,
-                'permission_name' => null,
-                'sort_order' => 2,
-                'status' => 'active',
-            ]
-        );
-
-        $sidebarSettings = SidebarMenu::updateOrCreate(
-            ['menu_key' => 'sidebar_settings'],
-            [
-                'title' => 'Sidebar Settings',
-                'route_name' => null,
-                'super_admin_route_name' => null,
-                'route_pattern' => null,
-                'icon' => 'bi bi-layout-sidebar-inset',
-                'parent_id' => null,
-                'permission_name' => null,
-                'sort_order' => 7,
-                'status' => 'active',
-            ]
-        );
-
-        SidebarMenu::updateOrCreate(
-            ['menu_key' => 'sidebar_menus_manage'],
-            [
-                'title' => 'Sidebar Menus',
-                'route_name' => 'admin.sidebar-menus.index',
-                'super_admin_route_name' => null,
-                'route_pattern' => 'admin.sidebar-menus.*',
-                'icon' => null,
-                'parent_id' => $sidebarSettings->id,
-                'permission_name' => null,
-                'sort_order' => 1,
-                'status' => 'active',
-            ]
-        );
-
-        SidebarMenu::updateOrCreate(
-            ['menu_key' => 'menu_access_assign'],
-            [
-                'title' => 'Menu Access',
-                'route_name' => 'admin.menu-access.index',
-                'super_admin_route_name' => null,
-                'route_pattern' => 'admin.menu-access.*',
-                'icon' => null,
-                'parent_id' => $sidebarSettings->id,
                 'permission_name' => null,
                 'sort_order' => 2,
                 'status' => 'active',
