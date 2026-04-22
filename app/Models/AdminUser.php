@@ -36,6 +36,16 @@ class AdminUser extends Model
         )->withTimestamps();
     }
 
+    public function sidebarMenus()
+    {
+        return $this->belongsToMany(
+            SidebarMenu::class,
+            'admin_sidebar_menu',
+            'admin_user_id',
+            'sidebar_menu_id'
+        )->withTimestamps();
+    }
+
     public function getAllPermissionsAttribute(): Collection
     {
         $this->loadMissing('roles.permissions');

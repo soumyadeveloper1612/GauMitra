@@ -4,12 +4,13 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
-use App\Http\Controllers\Admin\AdminUserController;   // for admin management
+use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\RoleController;
-use App\Http\Controllers\Admin\UserController;        // for app users listing/details
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\GaushalaController;
 use App\Http\Controllers\Admin\AdminReportCaseController;
 use App\Http\Controllers\Admin\NewsNoticeController;
+use App\Http\Controllers\Admin\SidebarMenuController;
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
@@ -141,6 +142,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/{role}/edit', [RoleController::class, 'edit'])->name('edit');
             Route::put('/{role}', [RoleController::class, 'update'])->name('update');
             Route::delete('/{role}', [RoleController::class, 'destroy'])->name('destroy');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sidebar Menus
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('sidebar-menus')->name('sidebar-menus.')->middleware('super.admin')->group(function () {
+            Route::get('/', [SidebarMenuController::class, 'index'])->name('index');
+            Route::get('/create', [SidebarMenuController::class, 'create'])->name('create');
+            Route::post('/store', [SidebarMenuController::class, 'store'])->name('store');
+            Route::get('/{sidebar_menu}/edit', [SidebarMenuController::class, 'edit'])->name('edit');
+            Route::put('/{sidebar_menu}', [SidebarMenuController::class, 'update'])->name('update');
+            Route::delete('/{sidebar_menu}', [SidebarMenuController::class, 'destroy'])->name('destroy');
         });
     });
 });
