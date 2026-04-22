@@ -7,8 +7,6 @@
         const sidebar = document.getElementById('sidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
         const submenuToggles = document.querySelectorAll('.submenu-toggle');
-        const liveTime = document.getElementById('liveTime');
-        const liveDate = document.getElementById('liveDate');
 
         function isMobile() {
             return window.innerWidth <= 991;
@@ -63,35 +61,6 @@
                 submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
             });
         });
-
-        function updateLiveDateTime() {
-            const now = new Date();
-
-            const timeOptions = {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
-            };
-
-            const dateOptions = {
-                weekday: 'short',
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric'
-            };
-
-            if (liveTime) {
-                liveTime.textContent = now.toLocaleTimeString('en-IN', timeOptions);
-            }
-
-            if (liveDate) {
-                liveDate.textContent = now.toLocaleDateString('en-IN', dateOptions);
-            }
-        }
-
-        updateLiveDateTime();
-        setInterval(updateLiveDateTime, 1000);
 
         window.addEventListener('resize', function () {
             if (!isMobile()) {
