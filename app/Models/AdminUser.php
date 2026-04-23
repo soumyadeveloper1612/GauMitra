@@ -42,26 +42,30 @@ class AdminUser extends Model
         }
 
         return $this->roles()->whereHas('permissions', function ($q) use ($permissionName) {
-            $q->where('name', $permissionName)->where('status', 'active');
+            $q->where('name', $permissionName)
+              ->where('status', 'active');
         })->exists();
     }
 
     public function assignedSidebarMenus()
     {
-        $baseQuery = SidebarMenu::with([
-                'children' => function ($q) {
-                    $q->where('status', 'active')->orderBy('sort_order');
-                }
-            ])
-            ->whereNull('parent_id')
+        $baseQuery = SidebarMenu::whereNull('parent_id')
             ->where('status', 'active')
             ->orderBy('sort_order');
 
         if ($this->is_super_admin) {
-            return $baseQuery->get();
+            return $baseQuery->with([
+                'children' => function ($q) {
+                    $q->where('status', 'active')->orderBy('sort_order');
+                }
+            ])->get();
         }
 
-        $assignedIds = $this->sidebarMenus()->pluck('sidebar_menus.id')->map(fn ($id) => (int) $id);
+        $selectedIds = $this->sidebarMenus()
+            ->pluck('sidebar_menus.id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
 
         $dashboardId = SidebarMenu::where('slug', 'dashboard')
             ->whereNull('parent_id')
@@ -69,37 +73,40 @@ class AdminUser extends Model
             ->value('id');
 
         if ($dashboardId) {
-            $assignedIds->push((int) $dashboardId);
+            $selectedIds->push((int) $dashboardId);
         }
 
-        $assignedIds = $assignedIds->unique()->values();
+        $selectedIds = $selectedIds->unique()->values();
 
-        if ($assignedIds->isEmpty()) {
+        if ($selectedIds->isEmpty()) {
             return collect();
         }
 
-        $menus = $baseQuery
-            ->where(function ($q) use ($assignedIds) {
-                $q->whereIn('id', $assignedIds)
-                  ->orWhereHas('children', function ($childQuery) use ($assignedIds) {
-                      $childQuery->whereIn('sidebar_menus.id', $assignedIds)
-                                 ->where('status', 'active');
-                  });
-            })
+        $selectedMenus = SidebarMenu::whereIn('id', $selectedIds)
+            ->get(['id', 'parent_id']);
+
+        $parentIds = $selectedMenus->pluck('parent_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id);
+
+        $topLevelIds = $selectedMenus->whereNull('parent_id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->merge($parentIds)
+            ->unique()
+            ->values();
+
+        return SidebarMenu::with([
+                'children' => function ($q) use ($selectedIds) {
+                    $q->where('status', 'active')
+                      ->whereIn('id', $selectedIds)
+                      ->orderBy('sort_order');
+                }
+            ])
+            ->whereNull('parent_id')
+            ->where('status', 'active')
+            ->whereIn('id', $topLevelIds)
+            ->orderBy('sort_order')
             ->get();
-
-        return $menus->map(function ($menu) use ($assignedIds) {
-            if (!$assignedIds->contains((int) $menu->id)) {
-                $filteredChildren = $menu->children->filter(function ($child) use ($assignedIds) {
-                    return $assignedIds->contains((int) $child->id);
-                })->values();
-
-                $menu->setRelation('children', $filteredChildren);
-            }
-
-            return $menu;
-        })->filter(function ($menu) use ($assignedIds) {
-            return $assignedIds->contains((int) $menu->id) || $menu->children->isNotEmpty();
-        })->values();
     }
 }

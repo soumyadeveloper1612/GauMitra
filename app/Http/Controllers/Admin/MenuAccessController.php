@@ -31,7 +31,10 @@ class MenuAccessController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        $selectedMenuIds = $admin->sidebarMenus()->pluck('sidebar_menus.id')->map(fn ($id) => (int) $id)->toArray();
+        $selectedMenuIds = $admin->sidebarMenus()
+            ->pluck('sidebar_menus.id')
+            ->map(fn ($id) => (int) $id)
+            ->toArray();
 
         return view('admin.menu-access.edit', compact('admin', 'menus', 'selectedMenuIds'));
     }
@@ -53,6 +56,15 @@ class MenuAccessController extends Controller
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values();
+
+        if ($menuIds->isNotEmpty()) {
+            $parentIds = SidebarMenu::whereIn('id', $menuIds)
+                ->whereNotNull('parent_id')
+                ->pluck('parent_id')
+                ->map(fn ($id) => (int) $id);
+
+            $menuIds = $menuIds->merge($parentIds)->unique()->values();
+        }
 
         $validMenuIds = SidebarMenu::whereIn('id', $menuIds)->pluck('id')->toArray();
 
