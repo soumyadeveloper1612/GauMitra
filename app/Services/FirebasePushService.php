@@ -31,11 +31,7 @@ class FirebasePushService
 
     public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
     {
-        $tokens = collect($tokens)
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+        $tokens = collect($tokens)->filter()->unique()->values()->all();
 
         if (empty($tokens)) {
             return [
@@ -45,9 +41,12 @@ class FirebasePushService
             ];
         }
 
-        $data = collect($data)
-            ->map(fn ($value) => is_scalar($value) ? (string) $value : json_encode($value))
-            ->toArray();
+        $data = collect($data)->map(function ($value) {
+            if (is_array($value) || is_object($value)) {
+                return json_encode($value);
+            }
+            return (string) $value;
+        })->toArray();
 
         $successCount = 0;
         $failureCount = 0;
@@ -59,13 +58,12 @@ class FirebasePushService
                     ->withNotification(Notification::create($title, $body))
                     ->withData($data);
 
-                $response = $this->messaging->send($message);
+                $this->messaging->send($message);
 
                 $successCount++;
                 $results[] = [
-                    'token'   => $token,
-                    'status'  => 'sent',
-                    'message' => $response,
+                    'token'  => $token,
+                    'status' => 'sent',
                 ];
             } catch (\Throwable $e) {
                 $failureCount++;
@@ -75,10 +73,12 @@ class FirebasePushService
                     'error' => $e->getMessage(),
                 ]);
 
+                $msg = strtolower($e->getMessage());
+
                 if (
-                    str_contains(strtolower($e->getMessage()), 'not found') ||
-                    str_contains(strtolower($e->getMessage()), 'invalid') ||
-                    str_contains(strtolower($e->getMessage()), 'registration token is not a valid fcm registration token')
+                    str_contains($msg, 'not found') ||
+                    str_contains($msg, 'invalid') ||
+                    str_contains($msg, 'registration token')
                 ) {
                     DeviceToken::where('token', $token)->update([
                         'is_active'    => false,

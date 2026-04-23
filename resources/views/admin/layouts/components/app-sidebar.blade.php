@@ -1,60 +1,6 @@
 @php
     $admin = \App\Models\AdminUser::find(session('admin_id'));
     $menus = $admin ? $admin->assignedSidebarMenus() : collect();
-
-    $isMenuAllowed = function ($menu) {
-        if ($menu->status !== 'active') {
-            return false;
-        }
-
-        if (!empty($menu->permission_name) && !admin_can($menu->permission_name)) {
-            return false;
-        }
-
-        return true;
-    };
-
-    $getMenuUrl = function ($menu, $admin) {
-        if ($menu->slug === 'dashboard') {
-            return $admin->is_super_admin
-                ? route('superadmin.dashboard')
-                : route('admin.dashboard');
-        }
-
-        if (!empty($menu->route_name) && \Illuminate\Support\Facades\Route::has($menu->route_name)) {
-            return route($menu->route_name);
-        }
-
-        if (!empty($menu->custom_url)) {
-            return $menu->custom_url;
-        }
-
-        return 'javascript:void(0)';
-    };
-
-    $isMenuActive = function ($menu, $admin) {
-        if ($menu->slug === 'dashboard') {
-            return $admin->is_super_admin
-                ? request()->routeIs('superadmin.dashboard')
-                : request()->routeIs('admin.dashboard');
-        }
-
-        if (!empty($menu->active_pattern)) {
-            $patterns = array_filter(array_map('trim', explode(',', $menu->active_pattern)));
-
-            foreach ($patterns as $pattern) {
-                if (request()->routeIs($pattern)) {
-                    return true;
-                }
-            }
-        }
-
-        if (!empty($menu->route_name)) {
-            return request()->routeIs($menu->route_name);
-        }
-
-        return false;
-    };
 @endphp
 
 <aside class="sidebar" id="sidebar">
@@ -73,16 +19,21 @@
     <ul class="sidebar-menu">
         @forelse($menus as $menu)
             @php
-                $children = $menu->children->filter(function ($child) use ($isMenuAllowed) {
-                    return $isMenuAllowed($child);
+                if (!$menu->canBeSeenBy($admin)) {
+                    continue;
+                }
+
+                $children = $menu->children->filter(function ($child) use ($admin) {
+                    return $child->canBeSeenBy($admin);
                 });
 
                 $hasChildren = $children->count() > 0;
-                $menuActive = $isMenuActive($menu, $admin) || $children->contains(function ($child) use ($isMenuActive, $admin) {
-                    return $isMenuActive($child, $admin);
+
+                $menuActive = $menu->isActiveFor($admin) || $children->contains(function ($child) use ($admin) {
+                    return $child->isActiveFor($admin);
                 });
 
-                $menuUrl = $getMenuUrl($menu, $admin);
+                $menuUrl = $menu->getUrlFor($admin);
             @endphp
 
             @if($hasChildren)
@@ -95,12 +46,8 @@
 
                     <ul class="submenu" style="{{ $menuActive ? 'display:block;' : 'display:none;' }}">
                         @foreach($children as $child)
-                            @php
-                                $childUrl = $getMenuUrl($child, $admin);
-                            @endphp
-
                             <li>
-                                <a href="{{ $childUrl }}" class="{{ $isMenuActive($child, $admin) ? 'active' : '' }}">
+                                <a href="{{ $child->getUrlFor($admin) }}" class="{{ $child->isActiveFor($admin) ? 'active' : '' }}">
                                     <span class="submenu-dot"></span>
                                     <span>{{ $child->title }}</span>
                                 </a>
@@ -109,14 +56,12 @@
                     </ul>
                 </li>
             @else
-                @if($isMenuAllowed($menu))
-                    <li class="menu-item">
-                        <a href="{{ $menuUrl }}" class="menu-link {{ $menuActive ? 'active' : '' }}">
-                            <span class="nav-icon"><i class="{{ $menu->icon ?: 'bi bi-circle' }}"></i></span>
-                            <span class="nav-text">{{ $menu->title }}</span>
-                        </a>
-                    </li>
-                @endif
+                <li class="menu-item">
+                    <a href="{{ $menuUrl }}" class="menu-link {{ $menuActive ? 'active' : '' }}">
+                        <span class="nav-icon"><i class="{{ $menu->icon ?: 'bi bi-circle' }}"></i></span>
+                        <span class="nav-text">{{ $menu->title }}</span>
+                    </a>
+                </li>
             @endif
         @empty
             <li class="menu-item">

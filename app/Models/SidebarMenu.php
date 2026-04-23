@@ -14,6 +14,7 @@ class SidebarMenu extends Model
         'slug',
         'icon',
         'route_name',
+        'super_admin_route_name',
         'active_pattern',
         'custom_url',
         'parent_id',
@@ -48,6 +49,10 @@ class SidebarMenu extends Model
             return false;
         }
 
+        if (!$admin->hasMenuAccess($this)) {
+            return false;
+        }
+
         if ($this->permission_name && !$admin->hasPermission($this->permission_name)) {
             return false;
         }
@@ -59,6 +64,10 @@ class SidebarMenu extends Model
     {
         if ($this->slug === 'dashboard') {
             return $admin->is_super_admin ? 'superadmin.dashboard' : 'admin.dashboard';
+        }
+
+        if ($admin->is_super_admin && !empty($this->super_admin_route_name)) {
+            return $this->super_admin_route_name;
         }
 
         return $this->route_name;
@@ -87,12 +96,20 @@ class SidebarMenu extends Model
                 : request()->routeIs('admin.dashboard');
         }
 
-        if ($this->active_pattern) {
-            return request()->routeIs($this->active_pattern);
+        if (!empty($this->active_pattern)) {
+            $patterns = array_filter(array_map('trim', explode(',', $this->active_pattern)));
+
+            foreach ($patterns as $pattern) {
+                if (request()->routeIs($pattern)) {
+                    return true;
+                }
+            }
         }
 
-        if ($this->route_name) {
-            return request()->routeIs($this->route_name);
+        $routeName = $this->getRouteNameFor($admin);
+
+        if ($routeName) {
+            return request()->routeIs($routeName);
         }
 
         return false;

@@ -17,16 +17,13 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/device-token', [DeviceTokenController::class, 'store']);
-    Route::post('/user-location', [UserLocationController::class, 'store']);
-
     Route::get('/emergency-cases', [EmergencyCaseController::class, 'index']);
     Route::post('/emergency-cases', [EmergencyCaseController::class, 'store']);
     Route::get('/emergency-cases/{id}', [EmergencyCaseController::class, 'show']);
 
     Route::post('/emergency-cases/{id}/accept', [EmergencyCaseController::class, 'accept']);
     Route::post('/emergency-cases/{id}/status', [EmergencyCaseController::class, 'updateStatus']);
-    Route::post('/emergency-cases/{id}/backup', [EmergencyCaseController::class, 'requestBackup']);
+    Route::post('/emergency-cases/{id}/request-backup', [EmergencyCaseController::class, 'requestBackup']);
     Route::post('/emergency-cases/{id}/resolve', [EmergencyCaseController::class, 'resolve']);
     Route::post('/emergency-cases/{id}/close', [EmergencyCaseController::class, 'close']);
 });

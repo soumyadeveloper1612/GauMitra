@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
+
     public function sendOtp(Request $request)
     {
         try {
@@ -34,7 +35,6 @@ class AuthController extends Controller
 
             $existingUser = User::where('mobile', $request->mobile)->first();
 
-            // If user exists but inactive, block login/registration on same mobile
             if ($existingUser && $existingUser->status !== 'active') {
                 return response()->json([
                     'status'  => false,
@@ -47,12 +47,12 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            $isNewUser = $existingUser ? false : true;
+            $isNewUser = !$existingUser;
 
             // Demo OTP
             $otp = substr($request->mobile, -4);
 
-            // Mark previous OTPs as used
+            // Mark previous OTPs as used for same mobile
             LoginOtp::where('mobile', $request->mobile)
                 ->where('purpose', 'login')
                 ->where('is_used', 0)
@@ -60,10 +60,11 @@ class AuthController extends Controller
                     'is_used' => 1,
                 ]);
 
-            // Save OTP
             $loginOtp = LoginOtp::create([
-                'user_id'     => $existingUser?->id, // null for new user
+                'user_id'     => $existingUser?->id,
                 'mobile'      => $request->mobile,
+                'platform'    => null,
+                'device_id'   => null,
                 'purpose'     => 'login',
                 'otp_hash'    => $otp, // testing only
                 'expires_at'  => now()->addMinutes(5),
@@ -81,7 +82,7 @@ class AuthController extends Controller
                     'mobile'      => $request->mobile,
                     'otp'         => $otp,
                     'expires_at'  => $loginOtp->expires_at,
-                    'user_exists' => $existingUser ? true : false,
+                    'user_exists' => (bool) $existingUser,
                     'is_new_user' => $isNewUser,
                 ],
             ]);
@@ -102,19 +103,23 @@ class AuthController extends Controller
             $validator = Validator::make($request->all(), [
                 'mobile'       => 'required|digits:10',
                 'otp'          => 'required|digits:4',
+                'platform'     => 'required|in:android,ios,web',
+                'device_id'    => 'required|string|max:255',
                 'name'         => 'nullable|string|max:255',
                 'device_token' => 'nullable|string',
-                'platform'     => 'required_with:device_token|in:android,ios,web',
             ], [
                 'mobile.required'       => 'Mobile number is required',
                 'mobile.digits'         => 'Mobile number must be 10 digits',
                 'otp.required'          => 'OTP is required',
                 'otp.digits'            => 'OTP must be 4 digits',
+                'platform.required'     => 'Platform is required',
+                'platform.in'           => 'Platform must be android, ios or web',
+                'device_id.required'    => 'Device ID is required',
+                'device_id.string'      => 'Device ID must be a string',
+                'device_id.max'         => 'Device ID may not be greater than 255 characters',
                 'name.string'           => 'Name must be a string',
                 'name.max'              => 'Name may not be greater than 255 characters',
                 'device_token.string'   => 'Device token must be a string',
-                'platform.required_with'=> 'Platform is required with device token',
-                'platform.in'           => 'Platform must be android, ios or web',
             ]);
 
             if ($validator->fails()) {
@@ -184,15 +189,17 @@ class AuthController extends Controller
 
             $loginOtp->update([
                 'user_id'     => $user->id,
+                'platform'    => $request->platform,
+                'device_id'   => $request->device_id,
                 'is_used'     => 1,
                 'verified_at' => now(),
             ]);
 
-            $savedDeviceToken = null;
-
             if ($request->filled('device_token')) {
-                $savedDeviceToken = DeviceToken::updateOrCreate(
-                    ['token' => $request->device_token],
+                DeviceToken::updateOrCreate(
+                    [
+                        'token' => $request->device_token,
+                    ],
                     [
                         'user_id'      => $user->id,
                         'platform'     => $request->platform,
@@ -207,16 +214,19 @@ class AuthController extends Controller
             $token = $user->createToken('mobile-login-token')->plainTextToken;
 
             return response()->json([
-                'status'              => true,
-                'message'             => $message,
-                'is_new_user'         => $isNewUser,
-                'address_exists'      => $addressExists,
-                'needs_address'       => !$addressExists,
-                'token'               => $token,
-                'token_type'          => 'Bearer',
-                'user'                => $user->fresh(),
-                'device_token_saved'  => $savedDeviceToken ? true : false,
-                'verified_at'         => $loginOtp->fresh()->verified_at,
+                'status'         => true,
+                'message'        => $message,
+                'is_new_user'    => $isNewUser,
+                'address_exists' => $addressExists,
+                'needs_address'  => !$addressExists,
+                'token'          => $token,
+                'token_type'     => 'Bearer',
+                'user'           => $user->fresh(),
+                'verified_at'    => $loginOtp->fresh()->verified_at,
+                'otp_meta'       => [
+                    'platform'  => $loginOtp->fresh()->platform,
+                    'device_id' => $loginOtp->fresh()->device_id,
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json([

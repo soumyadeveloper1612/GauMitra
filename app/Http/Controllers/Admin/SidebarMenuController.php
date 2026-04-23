@@ -31,7 +31,7 @@ class SidebarMenuController extends Controller
             ->orderBy('module')
             ->orderBy('label')
             ->get()
-            ->groupBy(fn($item) => $item->module ?: 'General');
+            ->groupBy(fn ($item) => $item->module ?: 'General');
 
         return view('admin.dashboard.sidebar-menu-create', compact('parents', 'permissions'));
     }
@@ -39,16 +39,17 @@ class SidebarMenuController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'title'           => 'required|string|max:100',
-            'slug'            => 'nullable|string|max:100|unique:sidebar_menus,slug',
-            'icon'            => 'nullable|string|max:100',
-            'route_name'      => 'nullable|string|max:255',
-            'active_pattern'  => 'nullable|string|max:255',
-            'custom_url'      => 'nullable|string|max:255',
-            'parent_id'       => 'nullable|exists:sidebar_menus,id',
-            'permission_name' => 'nullable|exists:permissions,name',
-            'sort_order'      => 'nullable|integer|min:0',
-            'status'          => 'required|in:active,inactive',
+            'title'                  => 'required|string|max:100',
+            'slug'                   => 'nullable|string|max:100|unique:sidebar_menus,slug',
+            'icon'                   => 'nullable|string|max:100',
+            'route_name'             => 'nullable|string|max:255',
+            'super_admin_route_name' => 'nullable|string|max:255',
+            'active_pattern'         => 'nullable|string|max:255',
+            'custom_url'             => 'nullable|string|max:255',
+            'parent_id'              => 'nullable|exists:sidebar_menus,id',
+            'permission_name'        => 'nullable|exists:permissions,name',
+            'sort_order'             => 'nullable|integer|min:0',
+            'status'                 => 'required|in:active,inactive',
         ]);
 
         $data['slug'] = Str::slug($data['slug'] ?: $data['title'], '_');
@@ -71,7 +72,7 @@ class SidebarMenuController extends Controller
             ->orderBy('module')
             ->orderBy('label')
             ->get()
-            ->groupBy(fn($item) => $item->module ?: 'General');
+            ->groupBy(fn ($item) => $item->module ?: 'General');
 
         return view('admin.dashboard.sidebar-menu-edit', [
             'menu' => $sidebar_menu,
@@ -83,16 +84,17 @@ class SidebarMenuController extends Controller
     public function update(Request $request, SidebarMenu $sidebar_menu)
     {
         $data = $request->validate([
-            'title'           => 'required|string|max:100',
-            'slug'            => 'nullable|string|max:100|unique:sidebar_menus,slug,' . $sidebar_menu->id,
-            'icon'            => 'nullable|string|max:100',
-            'route_name'      => 'nullable|string|max:255',
-            'active_pattern'  => 'nullable|string|max:255',
-            'custom_url'      => 'nullable|string|max:255',
-            'parent_id'       => 'nullable|exists:sidebar_menus,id',
-            'permission_name' => 'nullable|exists:permissions,name',
-            'sort_order'      => 'nullable|integer|min:0',
-            'status'          => 'required|in:active,inactive',
+            'title'                  => 'required|string|max:100',
+            'slug'                   => 'nullable|string|max:100|unique:sidebar_menus,slug,' . $sidebar_menu->id,
+            'icon'                   => 'nullable|string|max:100',
+            'route_name'             => 'nullable|string|max:255',
+            'super_admin_route_name' => 'nullable|string|max:255',
+            'active_pattern'         => 'nullable|string|max:255',
+            'custom_url'             => 'nullable|string|max:255',
+            'parent_id'              => 'nullable|exists:sidebar_menus,id',
+            'permission_name'        => 'nullable|exists:permissions,name',
+            'sort_order'             => 'nullable|integer|min:0',
+            'status'                 => 'required|in:active,inactive',
         ]);
 
         if (!empty($data['parent_id']) && (int) $data['parent_id'] === (int) $sidebar_menu->id) {

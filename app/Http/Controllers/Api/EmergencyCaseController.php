@@ -6,22 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Models\EmergencyCase;
 use App\Models\EmergencyCaseMedia;
 use App\Services\EmergencyCaseService;
+use App\Services\FirebasePushService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
-use App\Services\FirebasePushService;
-use Illuminate\Support\Facades\Log;
-
 class EmergencyCaseController extends Controller
 {
-   public function __construct(
-    protected EmergencyCaseService $caseService,
-    protected FirebasePushService $pushService
-) {
-}
+    public function __construct(
+        protected EmergencyCaseService $caseService,
+        protected FirebasePushService $pushService
+    ) {
+    }
 
     public function index(Request $request)
     {
@@ -37,9 +35,35 @@ class EmergencyCaseController extends Controller
         ]);
     }
 
-
     public function store(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'case_type'      => ['required', Rule::in(EmergencyCase::TYPES)],
+            'severity'       => ['required', Rule::in(EmergencyCase::SEVERITIES)],
+            'title'          => 'nullable|string|max:255',
+            'description'    => 'nullable|string',
+            'contact_number' => 'nullable|string|max:20',
+            'full_address'   => 'nullable|string|max:500',
+            'area_name'      => 'nullable|string|max:255',
+            'land_mark'      => 'nullable|string|max:255',
+            'road_name'      => 'nullable|string|max:255',
+            'city'           => 'nullable|string|max:150',
+            'latitude'       => 'required|numeric|between:-90,90',
+            'longitude'      => 'required|numeric|between:-180,180',
+            'photos'         => 'nullable|array',
+            'photos.*'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'videos'         => 'nullable|array',
+            'videos.*'       => 'nullable|mimes:mp4,mov,avi,mkv|max:40960',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => false,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
         try {
             $case = DB::transaction(function () use ($request) {
                 $case = EmergencyCase::create([
@@ -47,7 +71,7 @@ class EmergencyCaseController extends Controller
                     'reporter_id'    => auth()->id(),
                     'case_type'      => $request->case_type,
                     'title'          => $request->title ?? 'Emergency Case',
-                    'description'    => $request->description ?? null,
+                    'description'    => $request->description,
                     'severity'       => $request->severity,
                     'contact_number' => $request->contact_number,
                     'full_address'   => $request->full_address,
@@ -77,7 +101,6 @@ class EmergencyCaseController extends Controller
 
                 if ($request->hasFile('photos')) {
                     $photos = $request->file('photos');
-
                     if (!is_array($photos)) {
                         $photos = [$photos];
                     }
@@ -101,7 +124,6 @@ class EmergencyCaseController extends Controller
 
                 if ($request->hasFile('videos')) {
                     $videos = $request->file('videos');
-
                     if (!is_array($videos)) {
                         $videos = [$videos];
                     }
@@ -126,6 +148,11 @@ class EmergencyCaseController extends Controller
                 return $case;
             });
 
+            $case->load('reporter', 'media');
+
+            // Reporter confirmation notification at save time
+            $this->notifyReporterAboutCaseUpdate($case, 'Your emergency report has been submitted successfully.');
+
             $alertCount = 0;
 
             try {
@@ -146,10 +173,9 @@ class EmergencyCaseController extends Controller
             return response()->json([
                 'status'        => true,
                 'message'       => 'Emergency case reported successfully',
-                'data'          => $case->load('media'),
+                'data'          => $case,
                 'alerted_users' => $alertCount,
             ], 201);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status'  => false,
@@ -176,7 +202,7 @@ class EmergencyCaseController extends Controller
             'data' => $case,
         ]);
     }
-        
+
     public function accept($id)
     {
         $case = EmergencyCase::with('reporter')->findOrFail($id);
@@ -200,7 +226,7 @@ class EmergencyCaseController extends Controller
             'data'    => $assignment->load('user'),
         ]);
     }
-        
+
     public function updateStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
@@ -241,12 +267,12 @@ class EmergencyCaseController extends Controller
         $count = $this->caseService->requestBackup($case, auth()->id(), 30);
 
         return response()->json([
-            'status' => true,
-            'message' => 'Backup request sent successfully',
+            'status'              => true,
+            'message'             => 'Backup request sent successfully',
             'extra_alerted_users' => $count,
         ]);
     }
-        
+
     public function resolve(Request $request, $id)
     {
         $case = EmergencyCase::with('reporter')->findOrFail($id);
@@ -270,7 +296,7 @@ class EmergencyCaseController extends Controller
             'data'    => $updatedCase,
         ]);
     }
-        
+
     public function close(Request $request, $id)
     {
         $case = EmergencyCase::with('reporter')->findOrFail($id);
@@ -296,40 +322,40 @@ class EmergencyCaseController extends Controller
     }
 
     protected function notifyReporterAboutCaseUpdate(EmergencyCase $case, ?string $notes = null): void
-{
-    $case->loadMissing('reporter');
+    {
+        $case->loadMissing('reporter');
 
-    if (!$case->reporter) {
-        return;
+        if (!$case->reporter) {
+            return;
+        }
+
+        $title = 'Emergency Case Update';
+
+        $body = match ($case->status) {
+            'reported'    => "Your report {$case->case_uid} has been created.",
+            'accepted'    => "Your report {$case->case_uid} has been accepted.",
+            'in_progress' => "Your report {$case->case_uid} is now in progress.",
+            'resolved'    => "Your report {$case->case_uid} has been resolved.",
+            'closed'      => "Your report {$case->case_uid} has been closed.",
+            'cancelled'   => "Your report {$case->case_uid} has been cancelled.",
+            default       => "Your report {$case->case_uid} status changed to {$case->status}.",
+        };
+
+        if (!empty($notes)) {
+            $body .= " Notes: {$notes}";
+        }
+
+        $this->pushService->sendToUser(
+            $case->reporter,
+            $title,
+            $body,
+            [
+                'type'     => 'emergency_case_update',
+                'case_id'  => (string) $case->id,
+                'case_uid' => (string) $case->case_uid,
+                'status'   => (string) $case->status,
+                'screen'   => 'EmergencyCaseDetails',
+            ]
+        );
     }
-
-    $title = 'Emergency Case Update';
-
-    $body = match ($case->status) {
-        'reported'    => "Your report {$case->case_uid} has been created.",
-        'accepted'    => "Your report {$case->case_uid} has been accepted.",
-        'in_progress' => "Your report {$case->case_uid} is now in progress.",
-        'resolved'    => "Your report {$case->case_uid} has been resolved.",
-        'closed'      => "Your report {$case->case_uid} has been closed.",
-        'cancelled'   => "Your report {$case->case_uid} has been cancelled.",
-        default       => "Your report {$case->case_uid} status changed to {$case->status}.",
-    };
-
-    if (!empty($notes)) {
-        $body .= " Notes: {$notes}";
-    }
-
-    $this->pushService->sendToUser(
-        $case->reporter,
-        $title,
-        $body,
-        [
-            'type'      => 'emergency_case_update',
-            'case_id'   => (string) $case->id,
-            'case_uid'  => (string) $case->case_uid,
-            'status'    => (string) $case->status,
-            'screen'    => 'EmergencyCaseDetails',
-        ]
-    );
-}
 }

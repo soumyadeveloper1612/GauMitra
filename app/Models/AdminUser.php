@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 class AdminUser extends Model
 {
@@ -41,10 +42,52 @@ class AdminUser extends Model
             return true;
         }
 
-        return $this->roles()->whereHas('permissions', function ($q) use ($permissionName) {
-            $q->where('name', $permissionName)
-              ->where('status', 'active');
-        })->exists();
+        $hasRolePermission = $this->roles()
+            ->whereHas('permissions', function ($q) use ($permissionName) {
+                $q->where('name', $permissionName)
+                  ->where('status', 'active');
+            })
+            ->exists();
+
+        if ($hasRolePermission) {
+            return true;
+        }
+
+        return $this->sidebarMenus()
+            ->where('sidebar_menus.status', 'active')
+            ->where('sidebar_menus.permission_name', $permissionName)
+            ->exists();
+    }
+
+    public function hasMenuAccess(?SidebarMenu $menu): bool
+    {
+        if (!$menu) {
+            return false;
+        }
+
+        if ($menu->status !== 'active') {
+            return false;
+        }
+
+        if ($this->is_super_admin) {
+            return true;
+        }
+
+        $assignedIds = $this->sidebarMenus()
+            ->pluck('sidebar_menus.id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($assignedIds->contains((int) $menu->id)) {
+            return true;
+        }
+
+        if ($menu->parent_id && $assignedIds->contains((int) $menu->parent_id)) {
+            return true;
+        }
+
+        return false;
     }
 
     public function assignedSidebarMenus()
@@ -62,6 +105,7 @@ class AdminUser extends Model
         }
 
         $selectedIds = $this->sidebarMenus()
+            ->where('sidebar_menus.status', 'active')
             ->pluck('sidebar_menus.id')
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -82,8 +126,7 @@ class AdminUser extends Model
             return collect();
         }
 
-        $selectedMenus = SidebarMenu::whereIn('id', $selectedIds)
-            ->get(['id', 'parent_id']);
+        $selectedMenus = SidebarMenu::whereIn('id', $selectedIds)->get(['id', 'parent_id']);
 
         $parentIds = $selectedMenus->pluck('parent_id')
             ->filter()

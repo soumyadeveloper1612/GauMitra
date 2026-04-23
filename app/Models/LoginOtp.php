@@ -14,6 +14,8 @@ class LoginOtp extends Model
     protected $fillable = [
         'user_id',
         'mobile',
+        'platform',
+        'device_id',
         'purpose',
         'otp_hash',
         'expires_at',
@@ -29,7 +31,6 @@ class LoginOtp extends Model
         'verified_at' => 'datetime',
         'is_used'     => 'boolean',
     ];
-
 
     public function user()
     {
