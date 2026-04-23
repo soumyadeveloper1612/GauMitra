@@ -3,9 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class DeviceToken extends Model
 {
+    use HasFactory;
+
+    protected $table = 'device_tokens';
+
     protected $fillable = [
         'user_id',
         'token',
@@ -15,7 +20,7 @@ class DeviceToken extends Model
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'is_active'    => 'boolean',
         'last_used_at' => 'datetime',
     ];
 

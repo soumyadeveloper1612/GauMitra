@@ -8,6 +8,8 @@ use App\Models\LoginOtp;
 use App\Models\UserAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use App\Models\DeviceToken;
+
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
@@ -98,16 +100,21 @@ class AuthController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'mobile' => 'required|digits:10',
-                'otp'    => 'required|digits:4',
-                'name'   => 'nullable|string|max:255',
+                'mobile'       => 'required|digits:10',
+                'otp'          => 'required|digits:4',
+                'name'         => 'nullable|string|max:255',
+                'device_token' => 'nullable|string',
+                'platform'     => 'required_with:device_token|in:android,ios,web',
             ], [
-                'mobile.required' => 'Mobile number is required',
-                'mobile.digits'   => 'Mobile number must be 10 digits',
-                'otp.required'    => 'OTP is required',
-                'otp.digits'      => 'OTP must be 4 digits',
-                'name.string'     => 'Name must be a string',
-                'name.max'        => 'Name may not be greater than 255 characters',
+                'mobile.required'       => 'Mobile number is required',
+                'mobile.digits'         => 'Mobile number must be 10 digits',
+                'otp.required'          => 'OTP is required',
+                'otp.digits'            => 'OTP must be 4 digits',
+                'name.string'           => 'Name must be a string',
+                'name.max'              => 'Name may not be greater than 255 characters',
+                'device_token.string'   => 'Device token must be a string',
+                'platform.required_with'=> 'Platform is required with device token',
+                'platform.in'           => 'Platform must be android, ios or web',
             ]);
 
             if ($validator->fails()) {
@@ -149,7 +156,6 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // New user flow
             if (!$user) {
                 $user = User::create([
                     'name'               => $request->filled('name') ? $request->name : null,
@@ -167,7 +173,6 @@ class AuthController extends Controller
                     'last_login_at'      => now(),
                 ];
 
-                // update name for old user if sent and current name is empty
                 if ($request->filled('name') && empty($user->name)) {
                     $updateData['name'] = $request->name;
                 }
@@ -183,20 +188,35 @@ class AuthController extends Controller
                 'verified_at' => now(),
             ]);
 
-            // Address check moved here
+            $savedDeviceToken = null;
+
+            if ($request->filled('device_token')) {
+                $savedDeviceToken = DeviceToken::updateOrCreate(
+                    ['token' => $request->device_token],
+                    [
+                        'user_id'      => $user->id,
+                        'platform'     => $request->platform,
+                        'is_active'    => true,
+                        'last_used_at' => now(),
+                    ]
+                );
+            }
+
             $addressExists = UserAddress::where('user_id', $user->id)->exists();
 
             $token = $user->createToken('mobile-login-token')->plainTextToken;
 
             return response()->json([
-                'status'         => true,
-                'message'        => $message,
-                'is_new_user'    => $isNewUser,
-                'address_exists' => $addressExists,
-                'needs_address'  => !$addressExists,
-                'token'          => $token,
-                'token_type'     => 'Bearer',
-                'user'           => $user->fresh(),
+                'status'              => true,
+                'message'             => $message,
+                'is_new_user'         => $isNewUser,
+                'address_exists'      => $addressExists,
+                'needs_address'       => !$addressExists,
+                'token'               => $token,
+                'token_type'          => 'Bearer',
+                'user'                => $user->fresh(),
+                'device_token_saved'  => $savedDeviceToken ? true : false,
+                'verified_at'         => $loginOtp->fresh()->verified_at,
             ]);
         } catch (\Exception $e) {
             return response()->json([

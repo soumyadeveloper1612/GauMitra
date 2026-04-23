@@ -47,4 +47,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(UserAddress::class)->latestOfMany();
     }
+
+    public function deviceTokens()
+{
+    return $this->hasMany(\App\Models\DeviceToken::class);
+}
 }
