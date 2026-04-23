@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
-use App\Models\SidebarMenu;
 
 class AdminUser extends Model
 {
@@ -19,98 +17,89 @@ class AdminUser extends Model
         'is_super_admin',
     ];
 
-    protected $hidden = [
-        'password',
-    ];
-
     protected $casts = [
         'is_super_admin' => 'boolean',
     ];
 
     public function roles()
     {
-        return $this->belongsToMany(
-            Role::class,
-            'admin_role_user',
-            'admin_user_id',
-            'role_id'
-        )->withTimestamps();
+        return $this->belongsToMany(Role::class, 'admin_role_user', 'admin_user_id', 'role_id');
     }
 
     public function sidebarMenus()
     {
-        return $this->belongsToMany(
-            SidebarMenu::class,
-            'admin_sidebar_menu',
-            'admin_user_id',
-            'sidebar_menu_id'
-        )->withTimestamps();
+        return $this->belongsToMany(SidebarMenu::class, 'admin_sidebar_menu', 'admin_user_id', 'sidebar_menu_id');
     }
 
-    public function getAllPermissionsAttribute(): Collection
-    {
-        $this->loadMissing('roles.permissions');
-
-        return $this->roles
-            ->where('status', 'active')
-            ->flatMap(function ($role) {
-                return $role->permissions->where('status', 'active');
-            })
-            ->unique('id')
-            ->values();
-    }
-
-    public function hasRole(string $roleName): bool
+    public function hasPermission(?string $permissionName): bool
     {
         if ($this->is_super_admin) {
             return true;
         }
 
-        $this->loadMissing('roles');
-
-        return $this->roles
-            ->where('status', 'active')
-            ->contains('name', $roleName);
-    }
-
-    public function hasPermission(string $permissionName): bool
-    {
-        if ($this->is_super_admin) {
+        if (empty($permissionName)) {
             return true;
         }
 
-        return $this->all_permissions->contains('name', $permissionName);
+        return $this->roles()->whereHas('permissions', function ($q) use ($permissionName) {
+            $q->where('name', $permissionName)->where('status', 'active');
+        })->exists();
     }
 
     public function assignedSidebarMenus()
     {
-        $assignedIds = $this->sidebarMenus()->pluck('sidebar_menus.id')->toArray();
-
-        if ($this->is_super_admin && empty($assignedIds)) {
-            $assignedIds = SidebarMenu::where('status', 'active')->pluck('id')->toArray();
-        }
-
-        if (empty($assignedIds)) {
-            return collect();
-        }
-
-        return SidebarMenu::with([
-                'children' => function ($query) use ($assignedIds) {
-                    $query->where('status', 'active')
-                        ->whereIn('id', $assignedIds)
-                        ->orderBy('sort_order');
+        $baseQuery = SidebarMenu::with([
+                'children' => function ($q) {
+                    $q->where('status', 'active')->orderBy('sort_order');
                 }
             ])
             ->whereNull('parent_id')
             ->where('status', 'active')
-            ->where(function ($query) use ($assignedIds) {
-                $query->whereIn('id', $assignedIds)
-                    ->orWhereHas('children', function ($subQuery) use ($assignedIds) {
-                        $subQuery->whereIn('id', $assignedIds)
-                            ->where('status', 'active');
-                    });
+            ->orderBy('sort_order');
+
+        if ($this->is_super_admin) {
+            return $baseQuery->get();
+        }
+
+        $assignedIds = $this->sidebarMenus()->pluck('sidebar_menus.id')->map(fn ($id) => (int) $id);
+
+        $dashboardId = SidebarMenu::where('slug', 'dashboard')
+            ->whereNull('parent_id')
+            ->where('status', 'active')
+            ->value('id');
+
+        if ($dashboardId) {
+            $assignedIds->push((int) $dashboardId);
+        }
+
+        $assignedIds = $assignedIds->unique()->values();
+
+        if ($assignedIds->isEmpty()) {
+            return collect();
+        }
+
+        $menus = $baseQuery
+            ->where(function ($q) use ($assignedIds) {
+                $q->whereIn('id', $assignedIds)
+                  ->orWhereHas('children', function ($childQuery) use ($assignedIds) {
+                      $childQuery->whereIn('sidebar_menus.id', $assignedIds)
+                                 ->where('status', 'active');
+                  });
             })
-            ->orderBy('sort_order')
             ->get();
+
+        return $menus->map(function ($menu) use ($assignedIds) {
+            if (!$assignedIds->contains((int) $menu->id)) {
+                $filteredChildren = $menu->children->filter(function ($child) use ($assignedIds) {
+                    return $assignedIds->contains((int) $child->id);
+                })->values();
+
+                $menu->setRelation('children', $filteredChildren);
+            }
+
+            return $menu;
+        })->filter(function ($menu) use ($assignedIds) {
+            return $assignedIds->contains((int) $menu->id) || $menu->children->isNotEmpty();
+        })->values();
     }
 }

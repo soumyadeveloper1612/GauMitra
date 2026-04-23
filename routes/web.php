@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\GaushalaController;
 use App\Http\Controllers\Admin\AdminReportCaseController;
 use App\Http\Controllers\Admin\NewsNoticeController;
 use App\Http\Controllers\Admin\SidebarMenuController;
+use App\Http\Controllers\Admin\MenuAccessController;
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
@@ -70,6 +71,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->middleware('admin.permission:gaushala.view')
                 ->name('show');
         });
+
+        Route::prefix('menu-access')->name('menu-access.')->middleware('super.admin')->group(function () {
+    Route::get('/', [MenuAccessController::class, 'index'])->name('index');
+    Route::get('/{admin}/edit', [MenuAccessController::class, 'edit'])->name('edit');
+    Route::put('/{admin}', [MenuAccessController::class, 'update'])->name('update');
+});
 
         /*
         |--------------------------------------------------------------------------
