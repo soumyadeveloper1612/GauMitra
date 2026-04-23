@@ -2,14 +2,6 @@
     $admin = \App\Models\AdminUser::find(session('admin_id'));
     $menus = $admin ? $admin->assignedSidebarMenus() : collect();
 
-    $resolveRouteName = function ($menu) {
-        if (is_super_admin() && !empty($menu->super_admin_route_name)) {
-            return $menu->super_admin_route_name;
-        }
-
-        return $menu->route_name;
-    };
-
     $isMenuAllowed = function ($menu) {
         if ($menu->status !== 'active') {
             return false;
@@ -22,23 +14,43 @@
         return true;
     };
 
-    $isMenuActive = function ($menu) use ($resolveRouteName) {
-        $patterns = [];
-
-        if (!empty($menu->route_pattern)) {
-            $patterns = array_filter(array_map('trim', explode(',', $menu->route_pattern)));
+    $getMenuUrl = function ($menu, $admin) {
+        if ($menu->slug === 'dashboard') {
+            return $admin->is_super_admin
+                ? route('superadmin.dashboard')
+                : route('admin.dashboard');
         }
 
-        $resolvedRoute = $resolveRouteName($menu);
-
-        if (!empty($resolvedRoute)) {
-            $patterns[] = $resolvedRoute;
+        if (!empty($menu->route_name) && \Illuminate\Support\Facades\Route::has($menu->route_name)) {
+            return route($menu->route_name);
         }
 
-        foreach ($patterns as $pattern) {
-            if (request()->routeIs($pattern)) {
-                return true;
+        if (!empty($menu->custom_url)) {
+            return $menu->custom_url;
+        }
+
+        return 'javascript:void(0)';
+    };
+
+    $isMenuActive = function ($menu, $admin) {
+        if ($menu->slug === 'dashboard') {
+            return $admin->is_super_admin
+                ? request()->routeIs('superadmin.dashboard')
+                : request()->routeIs('admin.dashboard');
+        }
+
+        if (!empty($menu->active_pattern)) {
+            $patterns = array_filter(array_map('trim', explode(',', $menu->active_pattern)));
+
+            foreach ($patterns as $pattern) {
+                if (request()->routeIs($pattern)) {
+                    return true;
+                }
             }
+        }
+
+        if (!empty($menu->route_name)) {
+            return request()->routeIs($menu->route_name);
         }
 
         return false;
@@ -52,7 +64,7 @@
         </div>
         <div class="brand-text">
             <h4>GauMitra</h4>
-            <p>{{ is_super_admin() ? 'Super Admin Panel' : 'Admin Panel' }}</p>
+            <p>{{ $admin && $admin->is_super_admin ? 'Super Admin Panel' : 'Admin Panel' }}</p>
         </div>
     </div>
 
@@ -66,11 +78,11 @@
                 });
 
                 $hasChildren = $children->count() > 0;
-                $menuActive = $isMenuActive($menu) || $children->contains(function ($child) use ($isMenuActive) {
-                    return $isMenuActive($child);
+                $menuActive = $isMenuActive($menu, $admin) || $children->contains(function ($child) use ($isMenuActive, $admin) {
+                    return $isMenuActive($child, $admin);
                 });
 
-                $menuRoute = $resolveRouteName($menu);
+                $menuUrl = $getMenuUrl($menu, $admin);
             @endphp
 
             @if($hasChildren)
@@ -84,24 +96,22 @@
                     <ul class="submenu" style="{{ $menuActive ? 'display:block;' : 'display:none;' }}">
                         @foreach($children as $child)
                             @php
-                                $childRoute = $resolveRouteName($child);
+                                $childUrl = $getMenuUrl($child, $admin);
                             @endphp
 
-                            @if($childRoute && Route::has($childRoute))
-                                <li>
-                                    <a href="{{ route($childRoute) }}" class="{{ $isMenuActive($child) ? 'active' : '' }}">
-                                        <span class="submenu-dot"></span>
-                                        <span>{{ $child->title }}</span>
-                                    </a>
-                                </li>
-                            @endif
+                            <li>
+                                <a href="{{ $childUrl }}" class="{{ $isMenuActive($child, $admin) ? 'active' : '' }}">
+                                    <span class="submenu-dot"></span>
+                                    <span>{{ $child->title }}</span>
+                                </a>
+                            </li>
                         @endforeach
                     </ul>
                 </li>
             @else
-                @if($isMenuAllowed($menu) && $menuRoute && Route::has($menuRoute))
+                @if($isMenuAllowed($menu))
                     <li class="menu-item">
-                        <a href="{{ route($menuRoute) }}" class="menu-link {{ $menuActive ? 'active' : '' }}">
+                        <a href="{{ $menuUrl }}" class="menu-link {{ $menuActive ? 'active' : '' }}">
                             <span class="nav-icon"><i class="{{ $menu->icon ?: 'bi bi-circle' }}"></i></span>
                             <span class="nav-text">{{ $menu->title }}</span>
                         </a>

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use App\Models\SidebarMenu;
 
 class AdminUser extends Model
 {
@@ -79,5 +80,37 @@ class AdminUser extends Model
         }
 
         return $this->all_permissions->contains('name', $permissionName);
+    }
+
+    public function assignedSidebarMenus()
+    {
+        $assignedIds = $this->sidebarMenus()->pluck('sidebar_menus.id')->toArray();
+
+        if ($this->is_super_admin && empty($assignedIds)) {
+            $assignedIds = SidebarMenu::where('status', 'active')->pluck('id')->toArray();
+        }
+
+        if (empty($assignedIds)) {
+            return collect();
+        }
+
+        return SidebarMenu::with([
+                'children' => function ($query) use ($assignedIds) {
+                    $query->where('status', 'active')
+                        ->whereIn('id', $assignedIds)
+                        ->orderBy('sort_order');
+                }
+            ])
+            ->whereNull('parent_id')
+            ->where('status', 'active')
+            ->where(function ($query) use ($assignedIds) {
+                $query->whereIn('id', $assignedIds)
+                    ->orWhereHas('children', function ($subQuery) use ($assignedIds) {
+                        $subQuery->whereIn('id', $assignedIds)
+                            ->where('status', 'active');
+                    });
+            })
+            ->orderBy('sort_order')
+            ->get();
     }
 }
