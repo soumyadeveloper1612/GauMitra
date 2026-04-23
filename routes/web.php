@@ -17,6 +17,16 @@ Route::get('/', function () {
     return redirect()->route('admin.login');
 });
 
+Route::prefix('admin')->name('admin.')->middleware(['admin.auth'])->group(function () {
+
+    Route::prefix('menu-access')->name('menu-access.')->middleware('super.admin')->group(function () {
+        Route::get('/', [MenuAccessController::class, 'index'])->name('index');
+        Route::get('/{admin}/edit', [MenuAccessController::class, 'edit'])->name('edit');
+        Route::put('/{admin}', [MenuAccessController::class, 'update'])->name('update');
+    });
+
+});
+
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.submit');
@@ -72,12 +82,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('show');
         });
 
-        Route::prefix('menu-access')->name('menu-access.')->middleware('super.admin')->group(function () {
-    Route::get('/', [MenuAccessController::class, 'index'])->name('index');
-    Route::get('/{admin}/edit', [MenuAccessController::class, 'edit'])->name('edit');
-    Route::put('/{admin}', [MenuAccessController::class, 'update'])->name('update');
-});
-
+      
         /*
         |--------------------------------------------------------------------------
         | Report Cases
