@@ -15,22 +15,27 @@ class FirebasePushService
     ) {
     }
 
-    public function sendToUser(User $user, string $title, string $body, array $data = []): array
-    {
-        $tokens = LoginOtp::where('user_id', $user->id)
-            ->whereNotNull('verified_at')
-            ->where('is_used', true)
-            ->whereNotNull('device_id')
-            ->where('device_id', '!=', '')
-            ->latest('verified_at')
-            ->pluck('device_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+   public function sendToUser(User $user, string $title, string $body, array $data = []): array
+{
+    $token = LoginOtp::where('user_id', $user->id)
+        ->whereNotNull('verified_at')
+        ->where('is_used', true)
+        ->whereNotNull('device_id')
+        ->where('device_id', '!=', '')
+        ->latest('verified_at')
+        ->value('device_id');
 
-        return $this->sendToTokens($tokens, $title, $body, $data);
+    if (!$token) {
+        return [
+            'success_count' => 0,
+            'failure_count' => 0,
+            'results'       => [],
+            'message'       => 'No Firebase token found in login_otps.device_id',
+        ];
     }
+
+    return $this->sendToTokens([$token], $title, $body, $data);
+}
 
     public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
     {
