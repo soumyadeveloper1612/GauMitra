@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\SidebarMenu;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class SidebarMenuController extends Controller
 {
@@ -24,6 +25,7 @@ class SidebarMenuController extends Controller
     public function create()
     {
         $parents = SidebarMenu::whereNull('parent_id')
+            ->where('status', 'active')
             ->orderBy('sort_order')
             ->get();
 
@@ -39,20 +41,21 @@ class SidebarMenuController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'title'                  => 'required|string|max:100',
-            'slug'                   => 'nullable|string|max:100|unique:sidebar_menus,slug',
-            'icon'                   => 'nullable|string|max:100',
-            'route_name'             => 'nullable|string|max:255',
-            'super_admin_route_name' => 'nullable|string|max:255',
-            'active_pattern'         => 'nullable|string|max:255',
-            'custom_url'             => 'nullable|string|max:255',
-            'parent_id'              => 'nullable|exists:sidebar_menus,id',
-            'permission_name'        => 'nullable|exists:permissions,name',
-            'sort_order'             => 'nullable|integer|min:0',
-            'status'                 => 'required|in:active,inactive',
+            'title'                  => ['required', 'string', 'max:100'],
+            'slug'                   => ['nullable', 'string', 'max:100', 'unique:sidebar_menus,slug'],
+            'icon'                   => ['nullable', 'string', 'max:100'],
+            'route_name'             => ['nullable', 'string', 'max:255'],
+            'super_admin_route_name' => ['nullable', 'string', 'max:255'],
+            'active_pattern'         => ['nullable', 'string', 'max:255'],
+            'custom_url'             => ['nullable', 'string', 'max:255'],
+            'parent_id'              => ['nullable', 'exists:sidebar_menus,id'],
+            'permission_name'        => ['nullable', 'string', 'max:255'],
+            'sort_order'             => ['nullable', 'integer', 'min:0'],
+            'status'                 => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
-        $data['slug'] = Str::slug($data['slug'] ?: $data['title'], '_');
+        $data['slug'] = Str::slug($data['slug'] ?: $data['title'], '-');
+        $data['sort_order'] = $data['sort_order'] ?? 0;
 
         SidebarMenu::create($data);
 
@@ -65,6 +68,7 @@ class SidebarMenuController extends Controller
     {
         $parents = SidebarMenu::whereNull('parent_id')
             ->where('id', '!=', $sidebar_menu->id)
+            ->where('status', 'active')
             ->orderBy('sort_order')
             ->get();
 
@@ -76,6 +80,7 @@ class SidebarMenuController extends Controller
 
         return view('admin.dashboard.sidebar-menu-edit', [
             'menu' => $sidebar_menu,
+            'sidebarMenu' => $sidebar_menu,
             'parents' => $parents,
             'permissions' => $permissions,
         ]);
@@ -84,24 +89,25 @@ class SidebarMenuController extends Controller
     public function update(Request $request, SidebarMenu $sidebar_menu)
     {
         $data = $request->validate([
-            'title'                  => 'required|string|max:100',
-            'slug'                   => 'nullable|string|max:100|unique:sidebar_menus,slug,' . $sidebar_menu->id,
-            'icon'                   => 'nullable|string|max:100',
-            'route_name'             => 'nullable|string|max:255',
-            'super_admin_route_name' => 'nullable|string|max:255',
-            'active_pattern'         => 'nullable|string|max:255',
-            'custom_url'             => 'nullable|string|max:255',
-            'parent_id'              => 'nullable|exists:sidebar_menus,id',
-            'permission_name'        => 'nullable|exists:permissions,name',
-            'sort_order'             => 'nullable|integer|min:0',
-            'status'                 => 'required|in:active,inactive',
+            'title'                  => ['required', 'string', 'max:100'],
+            'slug'                   => ['nullable', 'string', 'max:100', 'unique:sidebar_menus,slug,' . $sidebar_menu->id],
+            'icon'                   => ['nullable', 'string', 'max:100'],
+            'route_name'             => ['nullable', 'string', 'max:255'],
+            'super_admin_route_name' => ['nullable', 'string', 'max:255'],
+            'active_pattern'         => ['nullable', 'string', 'max:255'],
+            'custom_url'             => ['nullable', 'string', 'max:255'],
+            'parent_id'              => ['nullable', 'exists:sidebar_menus,id'],
+            'permission_name'        => ['nullable', 'string', 'max:255'],
+            'sort_order'             => ['nullable', 'integer', 'min:0'],
+            'status'                 => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
         if (!empty($data['parent_id']) && (int) $data['parent_id'] === (int) $sidebar_menu->id) {
             return back()->withInput()->with('error', 'A menu cannot be its own parent.');
         }
 
-        $data['slug'] = Str::slug($data['slug'] ?: $data['title'], '_');
+        $data['slug'] = Str::slug($data['slug'] ?: $data['title'], '-');
+        $data['sort_order'] = $data['sort_order'] ?? 0;
 
         $sidebar_menu->update($data);
 

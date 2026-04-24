@@ -23,7 +23,7 @@
 
     <form action="{{ route('admin.sidebar-menus.store') }}" method="POST">
         @csrf
-        @include('admin.dashboard._forms')
+        @include('admin.dashboard._forms', ['sidebarMenu' => null])
     </form>
 </div>
 @endsection

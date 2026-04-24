@@ -11,18 +11,11 @@
             <h3 class="page-title">Sidebar Menu List</h3>
             <p class="page-subtitle">Manage parent and child menus for admin sidebar.</p>
         </div>
+
         <a href="{{ route('admin.sidebar-menus.create') }}" class="btn btn-success rounded-pill px-4">
             <i class="bi bi-plus-circle me-1"></i> Add Sidebar Menu
         </a>
     </div>
-
-    @if(session('success'))
-        <div class="alert alert-success rounded-4">{{ session('success') }}</div>
-    @endif
-
-    @if(session('error'))
-        <div class="alert alert-danger rounded-4">{{ session('error') }}</div>
-    @endif
 
     <div class="table-responsive">
         <table class="table align-middle">
@@ -30,19 +23,22 @@
                 <tr>
                     <th>#</th>
                     <th>Title</th>
-                    <th>Key</th>
+                    <th>Slug</th>
                     <th>Parent</th>
                     <th>Route</th>
+                    <th>Active Pattern</th>
                     <th>Permission</th>
                     <th>Sort</th>
                     <th>Status</th>
-                    <th width="180">Action</th>
+                    <th width="190">Action</th>
                 </tr>
             </thead>
+
             <tbody>
                 @forelse($menus as $menu)
                     <tr>
                         <td>{{ $loop->iteration + ($menus->firstItem() - 1) }}</td>
+
                         <td class="fw-semibold">
                             @if($menu->parent_id)
                                 <span class="ms-3">— {{ $menu->title }}</span>
@@ -50,11 +46,14 @@
                                 {{ $menu->title }}
                             @endif
                         </td>
-                        <td>{{ $menu->menu_key }}</td>
+
+                        <td>{{ $menu->slug }}</td>
                         <td>{{ $menu->parent?->title ?? 'Parent Menu' }}</td>
                         <td>{{ $menu->route_name ?? '-' }}</td>
+                        <td>{{ $menu->active_pattern ?? '-' }}</td>
                         <td>{{ $menu->permission_name ?? '-' }}</td>
                         <td>{{ $menu->sort_order }}</td>
+
                         <td>
                             @if($menu->status === 'active')
                                 <span class="badge bg-success">Active</span>
@@ -62,17 +61,19 @@
                                 <span class="badge bg-danger">Inactive</span>
                             @endif
                         </td>
+
                         <td>
-                            <a href="{{ route('admin.sidebar-menus.edit', $menu->id) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                            <a href="{{ route('admin.sidebar-menus.edit', $menu->id) }}"
+                               class="btn btn-sm btn-outline-primary rounded-pill">
                                 <i class="bi bi-pencil-square"></i> Edit
                             </a>
 
                             <form action="{{ route('admin.sidebar-menus.destroy', $menu->id) }}"
                                   method="POST"
-                                  class="d-inline"
-                                  onsubmit="return confirm('Are you sure you want to delete this menu?')">
+                                  class="d-inline delete-menu-form">
                                 @csrf
                                 @method('DELETE')
+
                                 <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">
                                     <i class="bi bi-trash"></i> Delete
                                 </button>
@@ -81,7 +82,9 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-4">No sidebar menus found.</td>
+                        <td colspan="10" class="text-center text-muted py-4">
+                            No sidebar menus found.
+                        </td>
                     </tr>
                 @endforelse
             </tbody>
