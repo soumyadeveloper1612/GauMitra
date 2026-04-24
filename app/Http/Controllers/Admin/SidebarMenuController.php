@@ -35,7 +35,7 @@ class SidebarMenuController extends Controller
             ->get()
             ->groupBy(fn ($item) => $item->module ?: 'General');
 
-        return view('admin.dashboard.sidebar-menu-create', compact('parents', 'permissions'));
+        return view('admin.dashboard.sidebar-menus-create', compact('parents', 'permissions'));
     }
 
     public function store(Request $request)
@@ -78,8 +78,7 @@ class SidebarMenuController extends Controller
             ->get()
             ->groupBy(fn ($item) => $item->module ?: 'General');
 
-        return view('admin.dashboard.sidebar-menu-edit', [
-            'menu' => $sidebar_menu,
+        return view('admin.dashboard.sidebar-menus-edit', [
             'sidebarMenu' => $sidebar_menu,
             'parents' => $parents,
             'permissions' => $permissions,

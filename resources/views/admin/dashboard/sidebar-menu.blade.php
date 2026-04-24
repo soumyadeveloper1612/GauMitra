@@ -70,7 +70,8 @@
 
                             <form action="{{ route('admin.sidebar-menus.destroy', $menu->id) }}"
                                   method="POST"
-                                  class="d-inline delete-menu-form">
+                                  class="d-inline"
+                                  onsubmit="return confirm('Are you sure you want to delete this menu?')">
                                 @csrf
                                 @method('DELETE')
 
