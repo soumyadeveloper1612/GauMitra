@@ -7,7 +7,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\CloudMessage;
-use Kreait\Firebase\Messaging\Notification;
 
 class FirebasePushService
 {
@@ -46,7 +45,7 @@ class FirebasePushService
                 'success_count' => 0,
                 'failure_count' => 0,
                 'results'       => [],
-                'message'       => 'No active Firebase token found in login_otps.device_id',
+                'message'       => 'No Firebase token found in login_otps.device_id',
             ];
         }
 
@@ -64,9 +63,28 @@ class FirebasePushService
 
         foreach ($tokens as $token) {
             try {
-                $message = CloudMessage::withTarget('token', $token)
-                    ->withNotification(Notification::create($title, $body))
-                    ->withData($data);
+                $message = CloudMessage::fromArray([
+                    'token' => $token,
+                    'notification' => [
+                        'title' => $title,
+                        'body'  => $body,
+                    ],
+                    'data' => $data,
+                    'android' => [
+                        'priority' => 'high',
+                        'notification' => [
+                            'sound' => 'default',
+                            'channel_id' => 'default',
+                        ],
+                    ],
+                    'apns' => [
+                        'payload' => [
+                            'aps' => [
+                                'sound' => 'default',
+                            ],
+                        ],
+                    ],
+                ]);
 
                 $this->messaging->send($message);
 
