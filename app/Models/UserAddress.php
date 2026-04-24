@@ -26,10 +26,11 @@ class UserAddress extends Model
         'longitude',
         'google_place_id',
         'plus_code',
+        'status',
     ];
 
     protected $casts = [
-        'latitude' => 'decimal:7',
+        'latitude'  => 'decimal:7',
         'longitude' => 'decimal:7',
     ];
 

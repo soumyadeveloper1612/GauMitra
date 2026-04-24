@@ -34,215 +34,217 @@ class EmergencyCaseController extends Controller
             'data' => $cases,
         ]);
     }
-public function store(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'case_type'      => ['required', Rule::in(EmergencyCase::TYPES)],
-        'severity'       => ['required', Rule::in(EmergencyCase::SEVERITIES)],
-        'title'          => 'nullable|string|max:255',
-        'description'    => 'nullable|string',
-        'contact_number' => 'nullable|string|max:20',
-        'full_address'   => 'nullable|string|max:500',
-        'area_name'      => 'nullable|string|max:255',
-        'land_mark'      => 'nullable|string|max:255',
-        'road_name'      => 'nullable|string|max:255',
-        'city'           => 'nullable|string|max:150',
-        'latitude'       => 'required|numeric|between:-90,90',
-        'longitude'      => 'required|numeric|between:-180,180',
-        'photos'         => 'nullable|array',
-        'photos.*'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
-        'videos'         => 'nullable|array',
-        'videos.*'       => 'nullable|mimes:mp4,mov,avi,mkv|max:40960',
-    ]);
 
-    if ($validator->fails()) {
-        return response()->json([
-            'status'  => false,
-            'message' => $validator->errors()->first(),
-            'errors'  => $validator->errors(),
-        ], 422);
-    }
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'case_type'      => ['required', Rule::in(EmergencyCase::TYPES)],
+            'severity'       => ['required', Rule::in(EmergencyCase::SEVERITIES)],
+            'title'          => 'nullable|string|max:255',
+            'description'    => 'nullable|string',
+            'contact_number' => 'nullable|string|max:20',
+            'full_address'   => 'nullable|string|max:500',
+            'area_name'      => 'nullable|string|max:255',
+            'land_mark'      => 'nullable|string|max:255',
+            'road_name'      => 'nullable|string|max:255',
+            'city'           => 'nullable|string|max:150',
+            'latitude'       => 'required|numeric|between:-90,90',
+            'longitude'      => 'required|numeric|between:-180,180',
+            'photos'         => 'nullable|array',
+            'photos.*'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'videos'         => 'nullable|array',
+            'videos.*'       => 'nullable|mimes:mp4,mov,avi,mkv|max:40960',
+        ]);
 
-    try {
-        $case = DB::transaction(function () use ($request) {
-            $case = EmergencyCase::create([
-                'case_uid'       => $this->caseService->generateCaseUid(),
-                'reporter_id'    => auth()->id(),
-                'case_type'      => $request->case_type,
-                'title'          => $request->title ?? 'Emergency Case',
-                'description'    => $request->description,
-                'severity'       => $request->severity,
-                'contact_number' => $request->contact_number,
-                'full_address'   => $request->full_address,
-                'area_name'      => $request->area_name,
-                'land_mark'      => $request->land_mark,
-                'road_name'      => $request->road_name,
-                'city'           => $request->city,
-                'latitude'       => $request->latitude,
-                'longitude'      => $request->longitude,
-                'status'         => 'reported',
-            ]);
-
-            $this->caseService->log(
-                $case,
-                auth()->id(),
-                'case_reported',
-                null,
-                'reported',
-                'Emergency case created',
-                [
-                    'case_type' => $case->case_type,
-                    'severity'  => $case->severity,
-                ],
-                (float) $case->latitude,
-                (float) $case->longitude
-            );
-
-            if ($request->hasFile('photos')) {
-                $photos = $request->file('photos');
-
-                if (!is_array($photos)) {
-                    $photos = [$photos];
-                }
-
-                foreach ($photos as $file) {
-                    if ($file && $file->isValid()) {
-                        $path = $file->store('emergency_cases/photos', 'public');
-
-                        EmergencyCaseMedia::create([
-                            'emergency_case_id' => $case->id,
-                            'user_id'           => auth()->id(),
-                            'media_type'        => 'photo',
-                            'file_path'         => $path,
-                            'file_name'         => $file->getClientOriginalName(),
-                            'mime_type'         => $file->getMimeType(),
-                            'file_size'         => $file->getSize(),
-                        ]);
-                    }
-                }
-            }
-
-            if ($request->hasFile('videos')) {
-                $videos = $request->file('videos');
-
-                if (!is_array($videos)) {
-                    $videos = [$videos];
-                }
-
-                foreach ($videos as $file) {
-                    if ($file && $file->isValid()) {
-                        $path = $file->store('emergency_cases/videos', 'public');
-
-                        EmergencyCaseMedia::create([
-                            'emergency_case_id' => $case->id,
-                            'user_id'           => auth()->id(),
-                            'media_type'        => 'video',
-                            'file_path'         => $path,
-                            'file_name'         => $file->getClientOriginalName(),
-                            'mime_type'         => $file->getMimeType(),
-                            'file_size'         => $file->getSize(),
-                        ]);
-                    }
-                }
-            }
-
-            return $case;
-        });
-
-        $case->load('reporter', 'media');
-
-        /*
-        |--------------------------------------------------------------------------
-        | Firebase Notification Send At Store Time
-        |--------------------------------------------------------------------------
-        */
-
-        $pushResult = [
-            'success_count' => 0,
-            'failure_count' => 0,
-            'results'       => [],
-            'message'       => 'Notification not sent',
-        ];
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => false,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
 
         try {
-            if ($case->reporter) {
-                $pushResult = $this->pushService->sendToUser(
-                    $case->reporter,
-                    'Emergency Case Submitted',
-                    'Your emergency report ' . $case->case_uid . ' has been submitted successfully.',
+            $case = DB::transaction(function () use ($request) {
+                $case = EmergencyCase::create([
+                    'case_uid'       => $this->caseService->generateCaseUid(),
+                    'reporter_id'    => auth()->id(),
+                    'case_type'      => $request->case_type,
+                    'title'          => $request->title ?? 'Emergency Case',
+                    'description'    => $request->description,
+                    'severity'       => $request->severity,
+                    'contact_number' => $request->contact_number,
+                    'full_address'   => $request->full_address,
+                    'area_name'      => $request->area_name,
+                    'land_mark'      => $request->land_mark,
+                    'road_name'      => $request->road_name,
+                    'city'           => $request->city,
+                    'latitude'       => $request->latitude,
+                    'longitude'      => $request->longitude,
+                    'status'         => 'reported',
+                ]);
+
+                $this->caseService->log(
+                    $case,
+                    auth()->id(),
+                    'case_reported',
+                    null,
+                    'reported',
+                    'Emergency case created',
                     [
-                        'type'      => 'emergency_case_created',
-                        'case_id'   => (string) $case->id,
-                        'case_uid'  => (string) $case->case_uid,
-                        'status'    => (string) $case->status,
-                        'case_type' => (string) $case->case_type,
-                        'severity'  => (string) $case->severity,
-                        'screen'    => 'EmergencyCaseDetails',
-                    ]
+                        'case_type' => $case->case_type,
+                        'severity'  => $case->severity,
+                    ],
+                    (float) $case->latitude,
+                    (float) $case->longitude
                 );
-            }
-        } catch (\Throwable $e) {
-            Log::error('Emergency case Firebase notification failed', [
-                'case_id' => $case->id,
-                'user_id' => $case->reporter_id,
-                'error'   => $e->getMessage(),
-            ]);
+
+                if ($request->hasFile('photos')) {
+                    $photos = $request->file('photos');
+
+                    if (!is_array($photos)) {
+                        $photos = [$photos];
+                    }
+
+                    foreach ($photos as $file) {
+                        if ($file && $file->isValid()) {
+                            $path = $file->store('emergency_cases/photos', 'public');
+
+                            EmergencyCaseMedia::create([
+                                'emergency_case_id' => $case->id,
+                                'user_id'           => auth()->id(),
+                                'media_type'        => 'photo',
+                                'file_path'         => $path,
+                                'file_name'         => $file->getClientOriginalName(),
+                                'mime_type'         => $file->getMimeType(),
+                                'file_size'         => $file->getSize(),
+                            ]);
+                        }
+                    }
+                }
+
+                if ($request->hasFile('videos')) {
+                    $videos = $request->file('videos');
+
+                    if (!is_array($videos)) {
+                        $videos = [$videos];
+                    }
+
+                    foreach ($videos as $file) {
+                        if ($file && $file->isValid()) {
+                            $path = $file->store('emergency_cases/videos', 'public');
+
+                            EmergencyCaseMedia::create([
+                                'emergency_case_id' => $case->id,
+                                'user_id'           => auth()->id(),
+                                'media_type'        => 'video',
+                                'file_path'         => $path,
+                                'file_name'         => $file->getClientOriginalName(),
+                                'mime_type'         => $file->getMimeType(),
+                                'file_size'         => $file->getSize(),
+                            ]);
+                        }
+                    }
+                }
+
+                return $case;
+            });
+
+            $case->load('reporter', 'media');
+
+            /*
+            |--------------------------------------------------------------------------
+            | Firebase Notification Send At Store Time
+            |--------------------------------------------------------------------------
+            */
 
             $pushResult = [
                 'success_count' => 0,
-                'failure_count' => 1,
+                'failure_count' => 0,
                 'results'       => [],
-                'message'       => $e->getMessage(),
+                'message'       => 'Notification not sent',
             ];
-        }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Nearby Emergency Alert Logic
-        |--------------------------------------------------------------------------
-        */
+            try {
+                if ($case->reporter) {
+                    $pushResult = $this->pushService->sendToUser(
+                        $case->reporter,
+                        'Emergency Case Submitted',
+                        'Your emergency report ' . $case->case_uid . ' has been submitted successfully.',
+                        [
+                            'type'      => 'emergency_case_created',
+                            'case_id'   => (string) $case->id,
+                            'case_uid'  => (string) $case->case_uid,
+                            'status'    => (string) $case->status,
+                            'case_type' => (string) $case->case_type,
+                            'severity'  => (string) $case->severity,
+                            'screen'    => 'EmergencyCaseDetails',
+                        ]
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::error('Emergency case Firebase notification failed', [
+                    'case_id' => $case->id,
+                    'user_id' => $case->reporter_id,
+                    'error'   => $e->getMessage(),
+                ]);
 
-        $alertCount = 0;
-
-        try {
-            $shouldAlertImmediately =
-                in_array($case->case_type, ['accident', 'illegal_transport']) ||
-                in_array($case->severity, ['high', 'critical']);
-
-            if ($shouldAlertImmediately) {
-                $alertCount = $this->caseService->sendCaseAlerts($case, 20);
+                $pushResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Nearby Emergency Alert Logic
+            |--------------------------------------------------------------------------
+            */
+
+            $alertCount = 0;
+
+            try {
+                $shouldAlertImmediately =
+                    in_array($case->case_type, ['accident', 'illegal_transport']) ||
+                    in_array($case->severity, ['high', 'critical']);
+
+                if ($shouldAlertImmediately) {
+                    $alertCount = $this->caseService->sendCaseAlerts($case, 20);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Emergency alert failed', [
+                    'case_id' => $case->id,
+                    'error'   => $e->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'status'        => true,
+                'message'       => 'Emergency case reported successfully',
+                'data'          => $case,
+                'alerted_users' => $alertCount,
+                'push_result'   => $pushResult,
+            ], 201);
+
         } catch (\Throwable $e) {
-            Log::error('Emergency alert failed', [
-                'case_id' => $case->id,
+            Log::error('Emergency case store failed', [
+                'user_id' => auth()->id(),
                 'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server Error',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+            ], 500);
         }
-
-        return response()->json([
-            'status'        => true,
-            'message'       => 'Emergency case reported successfully',
-            'data'          => $case,
-            'alerted_users' => $alertCount,
-            'push_result'   => $pushResult,
-        ], 201);
-
-    } catch (\Throwable $e) {
-        Log::error('Emergency case store failed', [
-            'user_id' => auth()->id(),
-            'error'   => $e->getMessage(),
-            'line'    => $e->getLine(),
-            'file'    => $e->getFile(),
-        ]);
-
-        return response()->json([
-            'status'  => false,
-            'message' => 'Server Error',
-            'error'   => $e->getMessage(),
-            'line'    => $e->getLine(),
-        ], 500);
     }
-}
+
     public function show($id)
     {
         $case = EmergencyCase::with([

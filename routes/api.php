@@ -9,8 +9,26 @@ Route::post('/send-otp', [AuthController::class, 'sendOtp']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/save-user-address', [UserAddressController::class, 'store']);
+
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | User Address APIs
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/user-addresses', [UserAddressController::class, 'index']);
+    Route::post('/save-user-address', [UserAddressController::class, 'store']);
+    Route::get('/user-addresses/{id}', [UserAddressController::class, 'show']);
+    Route::put('/user-addresses/{id}', [UserAddressController::class, 'update']);
+    Route::delete('/user-addresses/{id}', [UserAddressController::class, 'destroy']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Emergency Case APIs
+    |--------------------------------------------------------------------------
+    */
 
     Route::get('/emergency-cases', [EmergencyCaseController::class, 'index']);
     Route::post('/emergency-cases', [EmergencyCaseController::class, 'store']);
