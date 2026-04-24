@@ -3,176 +3,257 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\LoginOtp;
 use App\Models\User;
+use App\Models\LoginOtp;
+use App\Models\UserAddress;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Carbon;
+use App\Models\DeviceToken;
+
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
-use Carbon\Carbon;
 
 class AuthController extends Controller
 {
+
     public function sendOtp(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'mobile' => 'required|digits:10',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        $mobile = $request->mobile;
-
-        $user = User::firstOrCreate(
-            ['mobile' => $mobile],
-            [
-                'name' => 'User ' . substr($mobile, -4),
-                'status' => 'active',
-            ]
-        );
-
-        $otp = rand(100000, 999999);
-
-        LoginOtp::where('mobile', $mobile)
-            ->where('purpose', 'login')
-            ->where('is_used', false)
-            ->update([
-                'is_used' => true,
+        try {
+            $validator = Validator::make($request->all(), [
+                'mobile' => 'required|digits:10',
+            ], [
+                'mobile.required' => 'Mobile number is required',
+                'mobile.digits'   => 'Mobile number must be 10 digits',
             ]);
 
-        LoginOtp::create([
-            'user_id'    => $user->id,
-            'mobile'     => $mobile,
-            'purpose'    => 'login',
-            'otp_hash'   => Hash::make($otp),
-            'expires_at' => now()->addMinutes(5),
-            'is_used'    => false,
-            'attempts'   => 0,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-        ]);
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => $validator->errors()->first(),
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'OTP sent successfully',
-            'data' => [
-                'mobile' => $mobile,
+            $existingUser = User::where('mobile', $request->mobile)->first();
 
-                // Remove this in production.
-                'otp' => $otp,
-            ],
-        ]);
+            if ($existingUser && $existingUser->status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User exists but is inactive',
+                    'data'    => [
+                        'mobile'      => $request->mobile,
+                        'user_exists' => true,
+                        'is_new_user' => false,
+                    ],
+                ], 403);
+            }
+
+            $isNewUser = !$existingUser;
+
+            // Demo OTP
+            $otp = substr($request->mobile, -4);
+
+            // Mark previous OTPs as used for same mobile
+            LoginOtp::where('mobile', $request->mobile)
+                ->where('purpose', 'login')
+                ->where('is_used', 0)
+                ->update([
+                    'is_used' => 1,
+                ]);
+
+            $loginOtp = LoginOtp::create([
+                'user_id'     => $existingUser?->id,
+                'mobile'      => $request->mobile,
+                'platform'    => null,
+                'device_id'   => null,
+                'purpose'     => 'login',
+                'otp_hash'    => $otp, // testing only
+                'expires_at'  => now()->addMinutes(5),
+                'verified_at' => null,
+                'is_used'     => 0,
+                'attempts'    => 0,
+                'ip_address'  => $request->ip(),
+                'user_agent'  => $request->userAgent(),
+            ]);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'OTP sent successfully',
+                'data'    => [
+                    'mobile'      => $request->mobile,
+                    'otp'         => $otp,
+                    'expires_at'  => $loginOtp->expires_at,
+                    'user_exists' => (bool) $existingUser,
+                    'is_new_user' => $isNewUser,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ], 500);
+        }
     }
 
     public function verifyOtp(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'mobile'    => 'required|digits:10',
-            'otp'       => 'required|digits:4',
-            'platform'  => 'required|string|in:android,ios,web',
-            'device_id' => 'required|string|max:255',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        $otpRecord = LoginOtp::where('mobile', $request->mobile)
-            ->where('purpose', 'login')
-            ->where('is_used', false)
-            ->latest()
-            ->first();
-
-        if (!$otpRecord) {
-            return response()->json([
-                'status' => false,
-                'message' => 'OTP not found. Please request a new OTP.',
-            ], 404);
-        }
-
-        if ($otpRecord->expires_at && now()->greaterThan($otpRecord->expires_at)) {
-            return response()->json([
-                'status' => false,
-                'message' => 'OTP expired. Please request a new OTP.',
-            ], 410);
-        }
-
-        if ((int) $otpRecord->attempts >= 5) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Too many wrong attempts. Please request a new OTP.',
-            ], 429);
-        }
-
-        if (!Hash::check($request->otp, $otpRecord->otp_hash)) {
-            $otpRecord->increment('attempts');
-
-            return response()->json([
-                'status' => false,
-                'message' => 'Invalid OTP.',
-            ], 401);
-        }
-
-        $user = User::where('mobile', $request->mobile)->first();
-
-        if (!$user) {
-            $user = User::create([
-                'mobile' => $request->mobile,
-                'name'   => 'User ' . substr($request->mobile, -4),
-                'status' => 'active',
+        try {
+            $validator = Validator::make($request->all(), [
+                'mobile'       => 'required|digits:10',
+                'otp'          => 'required|digits:4',
+                'platform'     => 'required|in:android,ios,web',
+                'device_id'    => 'required|string|max:255',
+                'name'         => 'nullable|string|max:255',
+                'device_token' => 'nullable|string',
+            ], [
+                'mobile.required'       => 'Mobile number is required',
+                'mobile.digits'         => 'Mobile number must be 10 digits',
+                'otp.required'          => 'OTP is required',
+                'otp.digits'            => 'OTP must be 4 digits',
+                'platform.required'     => 'Platform is required',
+                'platform.in'           => 'Platform must be android, ios or web',
+                'device_id.required'    => 'Device ID is required',
+                'device_id.string'      => 'Device ID must be a string',
+                'device_id.max'         => 'Device ID may not be greater than 255 characters',
+                'name.string'           => 'Name must be a string',
+                'name.max'              => 'Name may not be greater than 255 characters',
+                'device_token.string'   => 'Device token must be a string',
             ]);
-        }
 
-        $otpRecord->update([
-            'user_id'     => $user->id,
-            'platform'    => $request->platform,
-            'device_id'   => $request->device_id,
-            'verified_at' => now(),
-            'is_used'     => true,
-            'ip_address'  => $request->ip(),
-            'user_agent'  => $request->userAgent(),
-        ]);
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => $validator->errors()->first(),
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
 
-        if (method_exists($user, 'tokens')) {
-            $user->tokens()->delete();
-        }
+            $loginOtp = LoginOtp::where('mobile', $request->mobile)
+                ->where('purpose', 'login')
+                ->where('otp_hash', $request->otp)
+                ->where('is_used', 0)
+                ->latest()
+                ->first();
 
-        $token = $user->createToken('api-token')->plainTextToken;
+            if (!$loginOtp) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid OTP',
+                ], 401);
+            }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'OTP verified successfully',
-            'data' => [
-                'token' => $token,
-                'token_type' => 'Bearer',
-                'user' => $user,
-                'device' => [
-                    'platform' => $request->platform,
-                    'device_id' => $request->device_id,
+            if (!empty($loginOtp->expires_at) && Carbon::parse($loginOtp->expires_at)->isPast()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'OTP expired',
+                ], 401);
+            }
+
+            $user = User::where('mobile', $request->mobile)->first();
+            $isNewUser = false;
+
+            if ($user && $user->status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User exists but is inactive',
+                ], 403);
+            }
+
+            if (!$user) {
+                $user = User::create([
+                    'name'               => $request->filled('name') ? $request->name : null,
+                    'mobile'             => $request->mobile,
+                    'status'             => 'active',
+                    'mobile_verified_at' => now(),
+                    'last_login_at'      => now(),
+                ]);
+
+                $isNewUser = true;
+                $message = 'New user registered and login successful';
+            } else {
+                $updateData = [
+                    'mobile_verified_at' => now(),
+                    'last_login_at'      => now(),
+                ];
+
+                if ($request->filled('name') && empty($user->name)) {
+                    $updateData['name'] = $request->name;
+                }
+
+                $user->update($updateData);
+
+                $message = 'Login successful';
+            }
+
+            $loginOtp->update([
+                'user_id'     => $user->id,
+                'platform'    => $request->platform,
+                'device_id'   => $request->device_id,
+                'is_used'     => 1,
+                'verified_at' => now(),
+            ]);
+
+            if ($request->filled('device_token')) {
+                DeviceToken::updateOrCreate(
+                    [
+                        'token' => $request->device_token,
+                    ],
+                    [
+                        'user_id'      => $user->id,
+                        'platform'     => $request->platform,
+                        'is_active'    => true,
+                        'last_used_at' => now(),
+                    ]
+                );
+            }
+
+            $addressExists = UserAddress::where('user_id', $user->id)->exists();
+
+            $token = $user->createToken('mobile-login-token')->plainTextToken;
+
+            return response()->json([
+                'status'         => true,
+                'message'        => $message,
+                'is_new_user'    => $isNewUser,
+                'address_exists' => $addressExists,
+                'needs_address'  => !$addressExists,
+                'token'          => $token,
+                'token_type'     => 'Bearer',
+                'user'           => $user->fresh(),
+                'verified_at'    => $loginOtp->fresh()->verified_at,
+                'otp_meta'       => [
+                    'platform'  => $loginOtp->fresh()->platform,
+                    'device_id' => $loginOtp->fresh()->device_id,
                 ],
-            ],
-        ]);
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ], 500);
+        }
     }
 
     public function logout(Request $request)
     {
-        if ($request->user()) {
-            $request->user()->currentAccessToken()?->delete();
-        }
+        try {
+            $request->user()->currentAccessToken()->delete();
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Logged out successfully',
-        ]);
+            return response()->json([
+                'status'  => true,
+                'message' => 'Logout successful',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
     }
 }
