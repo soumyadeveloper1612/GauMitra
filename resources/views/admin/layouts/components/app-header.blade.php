@@ -1,23 +1,31 @@
 <header class="top-header">
     <div class="header-left">
-        <button class="menu-toggle" id="menuToggle">
+        <button class="menu-toggle" id="menuToggle" type="button">
             <i class="bi bi-list"></i>
         </button>
 
         <div class="header-title">
+            <span class="header-mini-badge">
+                <i class="bi bi-speedometer2"></i>
+                Admin Panel
+            </span>
             <h5>@yield('page_title', 'GauMitra Dashboard')</h5>
         </div>
     </div>
 
     <div class="header-center">
         <div class="header-mantra">
-            <i class="bi bi-shield-check"></i>
+            <span class="mantra-icon">
+                <i class="bi bi-shield-check"></i>
+            </span>
             <span>धर्मो रक्षति रक्षितः</span>
         </div>
 
         <div class="header-date-time">
-            <i class="bi bi-calendar2-week"></i>
-            <div>
+            <span class="date-icon">
+                <i class="bi bi-calendar2-week"></i>
+            </span>
+            <div class="date-text">
                 <strong id="liveDate">{{ now()->format('d M Y') }}</strong>
                 <small id="liveTime">{{ now()->format('h:i:s A') }}</small>
             </div>
