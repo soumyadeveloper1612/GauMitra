@@ -7,10 +7,8 @@
         <div class="header-title">
             <div class="header-badge">
                 <i class="bi bi-lightning-charge-fill"></i>
-                <span>Admin Panel</span>
             </div>
             <h5>@yield('page_title', 'GauMitra Dashboard')</h5>
-            <p>@yield('page_subtitle', 'Manage users, report cases, admins and system activity')</p>
         </div>
     </div>
 
