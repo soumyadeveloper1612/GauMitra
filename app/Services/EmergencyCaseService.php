@@ -2,9 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\DeviceToken;
-use App\Models\EmergencyCase;
 use App\Models\EmergencyCaseAlert;
+use App\Models\LoginOtp;
 use App\Models\UserAddress;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -39,14 +38,15 @@ class EmergencyCaseService
                 'user_addresses.*',
                 DB::raw("(
                     6371 * acos(
-                        cos(radians({$lat}))
+                        cos(radians(?))
                         * cos(radians(user_addresses.latitude))
-                        * cos(radians(user_addresses.longitude) - radians({$lng}))
-                        + sin(radians({$lat}))
+                        * cos(radians(user_addresses.longitude) - radians(?))
+                        + sin(radians(?))
                         * sin(radians(user_addresses.latitude))
                     )
                 ) as distance")
             )
+            ->addBinding([$lat, $lng, $lat], 'select')
             ->join('users', 'users.id', '=', 'user_addresses.user_id')
             ->whereNotNull('user_addresses.latitude')
             ->whereNotNull('user_addresses.longitude')
@@ -58,8 +58,7 @@ class EmergencyCaseService
         $alertCount = 0;
 
         foreach ($nearbyUsers as $address) {
-            // save alert record
-            if (class_exists(\App\Models\EmergencyCaseAlert::class)) {
+            if (class_exists(EmergencyCaseAlert::class)) {
                 EmergencyCaseAlert::create([
                     'emergency_case_id' => $case->id,
                     'user_id'           => $address->user_id,
@@ -74,32 +73,44 @@ class EmergencyCaseService
                 ]);
             }
 
-            $alertCount++;
+            $tokens = LoginOtp::where('user_id', $address->user_id)
+                ->whereNotNull('verified_at')
+                ->where('is_used', true)
+                ->whereNotNull('device_id')
+                ->latest('verified_at')
+                ->pluck('device_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // device token notification
-            if (class_exists(\App\Models\DeviceToken::class)) {
-                $tokens = DeviceToken::where('user_id', $address->user_id)
-                    ->where('is_active', 1)
-                    ->pluck('token')
-                    ->toArray();
-
-                if (!empty($tokens)) {
-                    try {
-                        // You can integrate FCM or notification service here
-                        Log::info('Emergency push notification pending implementation', [
-                            'user_id' => $address->user_id,
-                            'case_id' => $case->id,
-                            'tokens'  => $tokens,
-                        ]);
-                    } catch (\Throwable $e) {
-                        Log::error('Push notification failed', [
-                            'user_id' => $address->user_id,
-                            'case_id' => $case->id,
-                            'error'   => $e->getMessage(),
-                        ]);
-                    }
+            if (!empty($tokens)) {
+                try {
+                    app(FirebasePushService::class)->sendToTokens(
+                        $tokens,
+                        'Nearby Emergency Case',
+                        'An emergency animal rescue case has been reported near your location.',
+                        [
+                            'type'              => 'nearby_emergency',
+                            'emergency_case_id' => $case->id,
+                            'case_uid'          => $case->case_uid,
+                            'case_type'         => $case->case_type,
+                            'severity'          => $case->severity,
+                            'latitude'          => $case->latitude,
+                            'longitude'         => $case->longitude,
+                            'distance_km'       => round($address->distance, 2),
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('Emergency push notification failed', [
+                        'user_id' => $address->user_id,
+                        'case_id' => $case->id,
+                        'error'   => $e->getMessage(),
+                    ]);
                 }
             }
+
+            $alertCount++;
         }
 
         return $alertCount;

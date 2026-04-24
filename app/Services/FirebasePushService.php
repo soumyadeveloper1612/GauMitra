@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\DeviceToken;
+use App\Models\LoginOtp;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
@@ -18,9 +18,12 @@ class FirebasePushService
 
     public function sendToUser(User $user, string $title, string $body, array $data = []): array
     {
-        $tokens = $user->deviceTokens()
-            ->where('is_active', true)
-            ->pluck('token')
+        $tokens = LoginOtp::where('user_id', $user->id)
+            ->whereNotNull('verified_at')
+            ->where('is_used', true)
+            ->whereNotNull('device_id')
+            ->latest('verified_at')
+            ->pluck('device_id')
             ->filter()
             ->unique()
             ->values()
@@ -31,7 +34,11 @@ class FirebasePushService
 
     public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
     {
-        $tokens = collect($tokens)->filter()->unique()->values()->all();
+        $tokens = collect($tokens)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         if (empty($tokens)) {
             return [
@@ -45,6 +52,7 @@ class FirebasePushService
             if (is_array($value) || is_object($value)) {
                 return json_encode($value);
             }
+
             return (string) $value;
         })->toArray();
 
@@ -61,6 +69,7 @@ class FirebasePushService
                 $this->messaging->send($message);
 
                 $successCount++;
+
                 $results[] = [
                     'token'  => $token,
                     'status' => 'sent',
@@ -80,9 +89,8 @@ class FirebasePushService
                     str_contains($msg, 'invalid') ||
                     str_contains($msg, 'registration token')
                 ) {
-                    DeviceToken::where('token', $token)->update([
-                        'is_active'    => false,
-                        'last_used_at' => now(),
+                    LoginOtp::where('device_id', $token)->update([
+                        'device_id' => null,
                     ]);
                 }
 
