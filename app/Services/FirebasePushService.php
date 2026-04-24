@@ -22,6 +22,7 @@ class FirebasePushService
             ->whereNotNull('verified_at')
             ->where('is_used', true)
             ->whereNotNull('device_id')
+            ->where('device_id', '!=', '')
             ->latest('verified_at')
             ->pluck('device_id')
             ->filter()
@@ -45,6 +46,7 @@ class FirebasePushService
                 'success_count' => 0,
                 'failure_count' => 0,
                 'results'       => [],
+                'message'       => 'No active Firebase token found in login_otps.device_id',
             ];
         }
 
@@ -87,7 +89,8 @@ class FirebasePushService
                 if (
                     str_contains($msg, 'not found') ||
                     str_contains($msg, 'invalid') ||
-                    str_contains($msg, 'registration token')
+                    str_contains($msg, 'registration token') ||
+                    str_contains($msg, 'requested entity was not found')
                 ) {
                     LoginOtp::where('device_id', $token)->update([
                         'device_id' => null,
