@@ -16,6 +16,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'mobile',
+        'profile_photo',
         'password',
         'status',
         'mobile_verified_at',
@@ -40,16 +41,19 @@ class User extends Authenticatable
 
     public function addresses()
     {
-        return $this->hasMany(UserAddress::class);
+        return $this->hasMany(UserAddress::class)
+            ->where('status', '!=', 'deleted');
     }
 
     public function latestAddress()
     {
-        return $this->hasOne(UserAddress::class)->latestOfMany();
+        return $this->hasOne(UserAddress::class)
+            ->where('status', '!=', 'deleted')
+            ->latestOfMany();
     }
 
     public function deviceTokens()
-{
-    return $this->hasMany(\App\Models\DeviceToken::class);
-}
+    {
+        return $this->hasMany(\App\Models\DeviceToken::class);
+    }
 }
