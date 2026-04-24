@@ -142,6 +142,39 @@
     });
 </script>
 
+<script>
+    function updateHeaderDateTime() {
+        const now = new Date();
+
+        const dateOptions = {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        };
+
+        const timeOptions = {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        };
+
+        const liveDate = document.getElementById('liveDate');
+        const liveTime = document.getElementById('liveTime');
+
+        if (liveDate) {
+            liveDate.textContent = now.toLocaleDateString('en-IN', dateOptions);
+        }
+
+        if (liveTime) {
+            liveTime.textContent = now.toLocaleTimeString('en-IN', timeOptions);
+        }
+    }
+
+    updateHeaderDateTime();
+    setInterval(updateHeaderDateTime, 1000);
+</script>
+
 @if(session('success'))
 <script>
     Swal.fire({

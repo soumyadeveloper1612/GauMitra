@@ -14,6 +14,21 @@
         </div>
     </div>
 
+    <div class="header-center">
+        <div class="header-mantra">
+            <i class="bi bi-shield-check"></i>
+            <span>धर्मो रक्षति रक्षितः</span>
+        </div>
+
+        <div class="header-date-time">
+            <i class="bi bi-calendar2-week"></i>
+            <div>
+                <strong id="liveDate">{{ now()->format('d M Y') }}</strong>
+                <small id="liveTime">{{ now()->format('h:i:s A') }}</small>
+            </div>
+        </div>
+    </div>
+
     <div class="header-right">
         <div class="header-status-chip">
             <span class="status-dot"></span>
