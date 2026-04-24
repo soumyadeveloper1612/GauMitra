@@ -56,15 +56,15 @@ class AuthController extends Controller
             ]);
 
         LoginOtp::create([
-            'user_id'    => $existingUser?->id,
-            'mobile'     => $mobile,
-            'otp_hash'   => Hash::make($otp),
-            'expires_at' => now()->addMinutes(10),
-            'verified_at'=> null,
-            'is_used'    => false,
-            'attempts'   => 0,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
+            'user_id'     => $existingUser?->id,
+            'mobile'      => $mobile,
+            'otp_hash'    => Hash::make($otp),
+            'expires_at'  => now()->addMinutes(10),
+            'verified_at' => null,
+            'is_used'     => false,
+            'attempts'    => 0,
+            'ip_address'  => $request->ip(),
+            'user_agent'  => $request->userAgent(),
         ]);
 
         return response()->json([
@@ -86,6 +86,7 @@ class AuthController extends Controller
         $validator = Validator::make($request->all(), [
             'mobile'    => 'required|digits:10',
             'otp'       => 'required|digits:4',
+            'name'      => 'nullable|string|max:255',
             'platform'  => 'required|string|in:android,ios,web',
             'device_id' => 'required|string|max:255',
         ]);
@@ -99,11 +100,12 @@ class AuthController extends Controller
         }
 
         $mobile = $request->mobile;
-        $otp = $request->otp;
+        $otp    = $request->otp;
 
-        $existingUser = User::where('mobile', $mobile)->first();
+        $user = User::where('mobile', $mobile)->first();
+        $isNewUser = false;
 
-        if ($existingUser && $existingUser->status !== 'active') {
+        if ($user && $user->status !== 'active') {
             return response()->json([
                 'status'  => false,
                 'message' => 'User exists but is inactive',
@@ -114,8 +116,6 @@ class AuthController extends Controller
                 ],
             ], 403);
         }
-
-        $isNewUser = !$existingUser;
 
         $loginOtp = LoginOtp::where('mobile', $mobile)
             ->where('is_used', false)
@@ -146,21 +146,35 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user = User::firstOrCreate(
-            ['mobile' => $mobile],
-            [
+        if (!$user) {
+            $user = User::create([
+                'name'               => $request->filled('name') ? $request->name : null,
+                'mobile'             => $mobile,
                 'status'             => 'active',
                 'mobile_verified_at' => now(),
-            ]
-        );
+                'last_login_at'      => now(),
+            ]);
 
-        $user->update([
-            'mobile_verified_at' => now(),
-            'last_login_at'      => now(),
-        ]);
+            $isNewUser = true;
+            $message = 'New user registered and login successful';
+        } else {
+            $updateData = [
+                'mobile_verified_at' => now(),
+                'last_login_at'      => now(),
+            ];
 
-        // Only platform and device_id save here.
-        // No fcm_token save logic here.
+            // If old user name is empty, update name from verify OTP request
+            if ($request->filled('name') && empty($user->name)) {
+                $updateData['name'] = $request->name;
+            }
+
+            $user->update($updateData);
+
+            $message = 'Login successful';
+        }
+
+        // Save only platform and device_id during verify OTP.
+        // No FCM token save logic here.
         $loginOtp->update([
             'user_id'     => $user->id,
             'platform'    => $request->platform,
@@ -177,14 +191,14 @@ class AuthController extends Controller
 
         return response()->json([
             'status'  => true,
-            'message' => 'OTP verified successfully',
+            'message' => $message,
             'data'    => [
                 'token'          => $token,
-                'user'           => $user,
+                'user'           => $user->fresh(),
                 'mobile'         => $mobile,
                 'platform'       => $request->platform,
                 'device_id'      => $request->device_id,
-                'user_exists'    => true,
+                'user_exists'    => !$isNewUser,
                 'is_new_user'    => $isNewUser,
                 'address_exists' => $addressExists,
             ],
