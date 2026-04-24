@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LoginOtp;
 use App\Models\User;
+use App\Models\UserAddress;
 use App\Models\DeviceToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -29,26 +30,34 @@ class AuthController extends Controller
 
         $mobile = $request->mobile;
 
+        $existingUser = User::where('mobile', $mobile)->first();
+
+        if ($existingUser && $existingUser->status !== 'active') {
+            return response()->json([
+                'status'  => false,
+                'message' => 'User exists but is inactive',
+                'data'    => [
+                    'mobile'      => $mobile,
+                    'user_exists' => true,
+                    'is_new_user' => false,
+                ],
+            ], 403);
+        }
+
+        $isNewUser = !$existingUser;
+
         /*
-         * OTP will be last 4 digits of mobile number.
+         * OTP is last 4 digits of mobile number.
          * Example: 9876543210 => 3210
          */
         $otp = substr($mobile, -4);
 
-        $user = User::where('mobile', $mobile)->first();
-
-        /*
-         * Purpose removed.
-         * Platform and device_id will be updated during verifyOtp().
-         *
-         * Using latest OTP row for same mobile to avoid duplicate issue.
-         */
         $loginOtp = LoginOtp::where('mobile', $mobile)
             ->latest('id')
             ->first();
 
         $otpData = [
-            'user_id'     => $user?->id,
+            'user_id'     => $existingUser?->id,
             'platform'    => null,
             'device_id'   => null,
             'otp_hash'    => Hash::make($otp),
@@ -68,17 +77,17 @@ class AuthController extends Controller
             ], $otpData));
         }
 
-        /*
-         * Send OTP by SMS provider here if needed.
-         * Since OTP is last 4 digits, SMS can send $otp.
-         */
-
         return response()->json([
             'status'  => true,
             'message' => 'OTP sent successfully',
+            'data'    => [
+                'mobile'      => $mobile,
+                'user_exists' => (bool) $existingUser,
+                'is_new_user' => $isNewUser,
 
-            // Remove this in production if needed
-            'otp'     => $otp,
+                // Remove this in production if you do not want to expose OTP
+                'otp'         => $otp,
+            ],
         ]);
     }
 
@@ -89,8 +98,6 @@ class AuthController extends Controller
             'otp'       => 'required|digits:4',
             'platform'  => 'required|string|in:android,ios,web',
             'device_id' => 'required|string|max:255',
-
-            // Optional Firebase token
             'fcm_token' => 'nullable|string',
         ]);
 
@@ -107,10 +114,22 @@ class AuthController extends Controller
         $deviceId = $request->device_id;
 
         return DB::transaction(function () use ($request, $mobile, $platform, $deviceId) {
-            /*
-             * Purpose removed.
-             * Verify by mobile only.
-             */
+            $existingUser = User::where('mobile', $mobile)->first();
+
+            if ($existingUser && $existingUser->status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User exists but is inactive',
+                    'data'    => [
+                        'mobile'      => $mobile,
+                        'user_exists' => true,
+                        'is_new_user' => false,
+                    ],
+                ], 403);
+            }
+
+            $isNewUser = !$existingUser;
+
             $loginOtp = LoginOtp::where('mobile', $mobile)
                 ->latest('id')
                 ->lockForUpdate()
@@ -144,10 +163,6 @@ class AuthController extends Controller
                 ], 429);
             }
 
-            /*
-             * OTP is mobile number last 4 digits.
-             * Still checking with hashed otp stored in login_otps table.
-             */
             if (!Hash::check($request->otp, $loginOtp->otp_hash)) {
                 $loginOtp->increment('attempts');
 
@@ -157,24 +172,27 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            $user = User::firstOrCreate(
-                ['mobile' => $mobile],
-                [
+            if ($existingUser) {
+                $user = $existingUser;
+
+                $user->update([
+                    'mobile_verified_at' => $user->mobile_verified_at ?? now(),
+                    'last_login_at'      => now(),
+                ]);
+            } else {
+                $user = User::create([
                     'name'               => 'User',
+                    'mobile'             => $mobile,
                     'status'             => 'active',
                     'mobile_verified_at' => now(),
                     'last_login_at'      => now(),
-                ]
-            );
+                ]);
+            }
 
-            $user->update([
-                'mobile_verified_at' => $user->mobile_verified_at ?? now(),
-                'last_login_at'      => now(),
-            ]);
+            $addressExists = UserAddress::where('user_id', $user->id)
+                ->where('status', '!=', 'deleted')
+                ->exists();
 
-            /*
-             * Update OTP row after verification.
-             */
             $loginOtp->update([
                 'user_id'     => $user->id,
                 'platform'    => $platform,
@@ -185,10 +203,6 @@ class AuthController extends Controller
                 'user_agent'  => $request->userAgent(),
             ]);
 
-            /*
-             * Update device token every login.
-             * Same platform + same device_id = update same row.
-             */
             DeviceToken::updateOrCreate(
                 [
                     'platform'  => $platform,
@@ -209,12 +223,16 @@ class AuthController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'OTP verified successfully',
-                'token'   => $token,
-                'user'    => [
-                    'id'     => $user->id,
-                    'name'   => $user->name,
-                    'mobile' => $user->mobile,
-                    'status' => $user->status,
+                'data'    => [
+                    'token'          => $token,
+                    'is_new_user'    => $isNewUser,
+                    'address_exists' => $addressExists,
+                    'user'           => [
+                        'id'     => $user->id,
+                        'name'   => $user->name,
+                        'mobile' => $user->mobile,
+                        'status' => $user->status,
+                    ],
                 ],
             ]);
         });
