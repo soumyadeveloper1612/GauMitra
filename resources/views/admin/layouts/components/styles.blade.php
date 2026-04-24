@@ -22,6 +22,12 @@
         --success: #16a34a;
     }
 
+    html,
+    body {
+        width: 100%;
+        min-height: 100%;
+    }
+
     body {
         font-family: 'Segoe UI', sans-serif;
         background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
@@ -59,31 +65,46 @@
         left: 0;
         top: 0;
         height: 100vh;
+        max-height: 100vh;
         z-index: 1000;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
         border-right: 1px solid rgba(255,255,255,0.06);
         box-shadow: 12px 0 40px rgba(2, 6, 23, 0.18);
         transition: all 0.3s ease;
     }
 
     .sidebar-top {
+        flex-shrink: 0;
         padding: 22px 18px 10px;
     }
 
     .sidebar-scroll {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
-        padding: 0 14px 18px;
+        overflow-x: hidden;
+        padding: 0 14px 28px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.22) transparent;
     }
 
     .sidebar-scroll::-webkit-scrollbar {
         width: 6px;
     }
 
+    .sidebar-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
     .sidebar-scroll::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.22);
         border-radius: 20px;
+    }
+
+    .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(255,255,255,0.34);
     }
 
     .brand-box {
@@ -140,6 +161,10 @@
         margin: 0;
     }
 
+    .sidebar-menu:last-child {
+        padding-bottom: 20px;
+    }
+
     .menu-item {
         margin-bottom: 8px;
     }
@@ -148,6 +173,7 @@
         display: flex;
         align-items: center;
         gap: 12px;
+        width: 100%;
         color: #e2e8f0;
         text-decoration: none;
         padding: 13px 14px;
@@ -158,6 +184,7 @@
         font-weight: 600;
         transition: all 0.3s ease;
         border: 1px solid transparent;
+        cursor: pointer;
     }
 
     .menu-link::before {
@@ -274,49 +301,18 @@
         flex-shrink: 0;
     }
 
+    .logout-menu {
+        color: #fecaca !important;
+    }
+
+    .logout-menu .nav-icon {
+        background: rgba(239,68,68,0.16);
+    }
+
     .logout-menu:hover,
     .logout-menu.active {
-        background: linear-gradient(135deg, rgba(239,68,68,0.20), rgba(220,38,38,0.10));
-    }
-
-    .sidebar-footer {
-        padding: 14px;
-        border-top: 1px solid rgba(255,255,255,0.06);
-    }
-
-    .sidebar-footer-card {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        background: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 16px;
-        padding: 14px;
-    }
-
-    .footer-icon {
-        width: 42px;
-        height: 42px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-size: 18px;
-    }
-
-    .footer-text h6 {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 700;
-        color: #fff;
-    }
-
-    .footer-text p {
-        margin: 2px 0 0;
-        font-size: 11px;
-        color: #cbd5e1;
+        color: #ffffff !important;
+        background: linear-gradient(135deg, rgba(239,68,68,0.24), rgba(220,38,38,0.12)) !important;
     }
 
     .main-content {
@@ -471,6 +467,7 @@
         font-weight: 700;
         box-shadow: 0 12px 24px rgba(220,38,38,0.16);
         transition: 0.3s ease;
+        border: none;
     }
 
     .logout-btn:hover {
@@ -506,9 +503,18 @@
     .admin-wrapper.sidebar-collapsed .nav-text,
     .admin-wrapper.sidebar-collapsed .nav-badge,
     .admin-wrapper.sidebar-collapsed .submenu-arrow,
-    .admin-wrapper.sidebar-collapsed .submenu,
-    .admin-wrapper.sidebar-collapsed .sidebar-footer {
+    .admin-wrapper.sidebar-collapsed .submenu {
         display: none !important;
+    }
+
+    .admin-wrapper.sidebar-collapsed .sidebar-top {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .admin-wrapper.sidebar-collapsed .sidebar-scroll {
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
     .admin-wrapper.sidebar-collapsed .menu-link {
@@ -535,6 +541,8 @@
         .sidebar {
             transform: translateX(-100%);
             width: var(--sidebar-width);
+            height: 100dvh;
+            max-height: 100dvh;
         }
 
         .sidebar.mobile-open {
@@ -562,6 +570,10 @@
 
         .header-title h5 {
             font-size: 18px;
+        }
+
+        .sidebar-scroll {
+            padding-bottom: 45px;
         }
     }
 

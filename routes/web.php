@@ -12,6 +12,8 @@ use App\Http\Controllers\Admin\AdminReportCaseController;
 use App\Http\Controllers\Admin\NewsNoticeController;
 use App\Http\Controllers\Admin\SidebarMenuController;
 use App\Http\Controllers\Admin\MenuAccessController;
+use App\Http\Controllers\Admin\AnimalTreatmentGuideController;
+
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
@@ -170,6 +172,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{sidebar_menu}', [SidebarMenuController::class, 'destroy'])->name('destroy');
         });
     });
+});
+
+Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
+    Route::get('/animal-treatment-guides', [AnimalTreatmentGuideController::class, 'index'])->name('animal-treatment-guides.index');
+    Route::get('/animal-treatment-guides/create', [AnimalTreatmentGuideController::class, 'create'])->name('animal-treatment-guides.create');
+    Route::post('/animal-treatment-guides/store', [AnimalTreatmentGuideController::class, 'store'])->name('animal-treatment-guides.store');
+    Route::put('/animal-treatment-guides/update/{id}', [AnimalTreatmentGuideController::class, 'update'])->name('animal-treatment-guides.update');
+    Route::delete('/animal-treatment-guides/delete/{id}', [AnimalTreatmentGuideController::class, 'destroy'])->name('animal-treatment-guides.destroy');
 });
 
 Route::prefix('super-admin')->name('superadmin.')->middleware(['admin.auth', 'super.admin'])->group(function () {
