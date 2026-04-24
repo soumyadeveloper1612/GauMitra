@@ -5,9 +5,6 @@
         </button>
 
         <div class="header-title">
-            <div class="header-badge">
-                <i class="bi bi-lightning-charge-fill"></i>
-            </div>
             <h5>@yield('page_title', 'GauMitra Dashboard')</h5>
         </div>
     </div>
