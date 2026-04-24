@@ -13,76 +13,10 @@ use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
-
     public function sendOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'mobile'  => 'required|digits:10',
-            'purpose' => 'nullable|string|max:50',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Validation failed',
-                'errors'  => $validator->errors(),
-            ], 422);
-        }
-
-        $mobile  = $request->mobile;
-        $purpose = $request->purpose ?? 'login';
-
-        $otp = random_int(100000, 999999);
-
-        $user = User::where('mobile', $mobile)->first();
-
-        /*
-        * Same mobile + same purpose = update same row.
-        * Platform and device_id will be updated during verifyOtp().
-        */
-        LoginOtp::updateOrCreate(
-            [
-                'mobile'  => $mobile,
-                'purpose' => $purpose,
-            ],
-            [
-                'user_id'     => $user?->id,
-                'platform'    => null,
-                'device_id'   => null,
-                'otp_hash'    => Hash::make($otp),
-                'expires_at'  => now()->addMinutes(5),
-                'verified_at' => null,
-                'is_used'     => false,
-                'attempts'    => 0,
-                'ip_address'  => $request->ip(),
-                'user_agent'  => $request->userAgent(),
-            ]
-        );
-
-        /*
-        * Send OTP by SMS provider here.
-        */
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'OTP sent successfully',
-
-            // Remove this in production
-            'otp'     => $otp,
-        ]);
-    }
-
-    public function verifyOtp(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'mobile'     => 'required|digits:10',
-            'otp'        => 'required|digits:6',
-            'platform'   => 'required|string|in:android,ios,web',
-            'device_id'  => 'required|string|max:255',
-
-            // Optional Firebase token
-            'fcm_token'  => 'nullable|string',
-            'purpose'    => 'nullable|string|max:50',
+            'mobile' => 'required|digits:10',
         ]);
 
         if ($validator->fails()) {
@@ -94,14 +28,92 @@ class AuthController extends Controller
         }
 
         $mobile = $request->mobile;
+
+        /*
+         * OTP will be last 4 digits of mobile number.
+         * Example: 9876543210 => 3210
+         */
+        $otp = substr($mobile, -4);
+
+        $user = User::where('mobile', $mobile)->first();
+
+        /*
+         * Purpose removed.
+         * Platform and device_id will be updated during verifyOtp().
+         *
+         * Using latest OTP row for same mobile to avoid duplicate issue.
+         */
+        $loginOtp = LoginOtp::where('mobile', $mobile)
+            ->latest('id')
+            ->first();
+
+        $otpData = [
+            'user_id'     => $user?->id,
+            'platform'    => null,
+            'device_id'   => null,
+            'otp_hash'    => Hash::make($otp),
+            'expires_at'  => now()->addMinutes(5),
+            'verified_at' => null,
+            'is_used'     => false,
+            'attempts'    => 0,
+            'ip_address'  => $request->ip(),
+            'user_agent'  => $request->userAgent(),
+        ];
+
+        if ($loginOtp) {
+            $loginOtp->update($otpData);
+        } else {
+            LoginOtp::create(array_merge([
+                'mobile' => $mobile,
+            ], $otpData));
+        }
+
+        /*
+         * Send OTP by SMS provider here if needed.
+         * Since OTP is last 4 digits, SMS can send $otp.
+         */
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'OTP sent successfully',
+
+            // Remove this in production if needed
+            'otp'     => $otp,
+        ]);
+    }
+
+    public function verifyOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'mobile'    => 'required|digits:10',
+            'otp'       => 'required|digits:4',
+            'platform'  => 'required|string|in:android,ios,web',
+            'device_id' => 'required|string|max:255',
+
+            // Optional Firebase token
+            'fcm_token' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $mobile   = $request->mobile;
         $platform = $request->platform;
         $deviceId = $request->device_id;
-        $purpose = $request->purpose ?? 'login';
 
-        return DB::transaction(function () use ($request, $mobile, $platform, $deviceId, $purpose) {
+        return DB::transaction(function () use ($request, $mobile, $platform, $deviceId) {
+            /*
+             * Purpose removed.
+             * Verify by mobile only.
+             */
             $loginOtp = LoginOtp::where('mobile', $mobile)
-                ->where('platform', $platform)
-                ->where('purpose', $purpose)
+                ->latest('id')
+                ->lockForUpdate()
                 ->first();
 
             if (!$loginOtp) {
@@ -132,6 +144,10 @@ class AuthController extends Controller
                 ], 429);
             }
 
+            /*
+             * OTP is mobile number last 4 digits.
+             * Still checking with hashed otp stored in login_otps table.
+             */
             if (!Hash::check($request->otp, $loginOtp->otp_hash)) {
                 $loginOtp->increment('attempts');
 
@@ -144,20 +160,20 @@ class AuthController extends Controller
             $user = User::firstOrCreate(
                 ['mobile' => $mobile],
                 [
-                    'name' => 'User',
-                    'status' => 'active',
+                    'name'               => 'User',
+                    'status'             => 'active',
                     'mobile_verified_at' => now(),
-                    'last_login_at' => now(),
+                    'last_login_at'      => now(),
                 ]
             );
 
             $user->update([
                 'mobile_verified_at' => $user->mobile_verified_at ?? now(),
-                'last_login_at' => now(),
+                'last_login_at'      => now(),
             ]);
 
             /*
-             * Update same OTP row after verification.
+             * Update OTP row after verification.
              */
             $loginOtp->update([
                 'user_id'     => $user->id,
@@ -203,5 +219,4 @@ class AuthController extends Controller
             ]);
         });
     }
-    
 }
