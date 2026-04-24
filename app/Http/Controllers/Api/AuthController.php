@@ -74,7 +74,7 @@ class AuthController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'mobile'    => 'required|digits:10',
-            'otp'       => 'required|digits:6',
+            'otp'       => 'required|digits:4',
             'platform'  => 'required|string|in:android,ios,web',
             'device_id' => 'required|string|max:255',
         ]);
