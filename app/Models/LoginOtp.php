@@ -30,6 +30,7 @@ class LoginOtp extends Model
         'expires_at'  => 'datetime',
         'verified_at' => 'datetime',
         'is_used'     => 'boolean',
+        'attempts'    => 'integer',
     ];
 
     public function user()
