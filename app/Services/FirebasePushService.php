@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\LoginOtp;
+use App\Models\DeviceToken;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
@@ -15,28 +15,95 @@ class FirebasePushService
     ) {
     }
 
-   public function sendToUser(User $user, string $title, string $body, array $data = []): array
-{
-    $token = LoginOtp::where('user_id', $user->id)
-        ->whereNotNull('verified_at')
-        ->where('is_used', true)
-        ->whereNotNull('device_id')
-        ->where('device_id', '!=', '')
-        ->latest('verified_at')
-        ->value('device_id');
+    /**
+     * Send notification to all active devices of a user.
+     * Optional filters:
+     * - $platform = android / ios / web
+     * - $deviceId = specific device_id
+     */
+    public function sendToUser(
+        User $user,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $platform = null,
+        ?string $deviceId = null
+    ): array {
+        $query = DeviceToken::query()
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->whereNotNull('fcm_token')
+            ->where('fcm_token', '!=', '');
 
-    if (!$token) {
-        return [
-            'success_count' => 0,
-            'failure_count' => 0,
-            'results'       => [],
-            'message'       => 'No Firebase token found in login_otps.device_id',
-        ];
+        if (!empty($platform)) {
+            $query->where('platform', $platform);
+        }
+
+        if (!empty($deviceId)) {
+            $query->where('device_id', $deviceId);
+        }
+
+        $tokens = $query
+            ->latest('last_used_at')
+            ->pluck('fcm_token')
+            ->toArray();
+
+        if (empty($tokens)) {
+            return [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'No active Firebase token found in device_tokens table.',
+            ];
+        }
+
+        return $this->sendToTokens($tokens, $title, $body, $data);
     }
 
-    return $this->sendToTokens([$token], $title, $body, $data);
-}
+    /**
+     * Send notification to user by platform.
+     * Example: android / ios / web
+     */
+    public function sendToUserPlatform(
+        User $user,
+        string $platform,
+        string $title,
+        string $body,
+        array $data = []
+    ): array {
+        return $this->sendToUser(
+            user: $user,
+            title: $title,
+            body: $body,
+            data: $data,
+            platform: $platform
+        );
+    }
 
+    /**
+     * Send notification to one specific device of user.
+     */
+    public function sendToUserDevice(
+        User $user,
+        string $deviceId,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $platform = null
+    ): array {
+        return $this->sendToUser(
+            user: $user,
+            title: $title,
+            body: $body,
+            data: $data,
+            platform: $platform,
+            deviceId: $deviceId
+        );
+    }
+
+    /**
+     * Send notification to multiple FCM tokens.
+     */
     public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
     {
         $tokens = collect($tokens)
@@ -50,7 +117,7 @@ class FirebasePushService
                 'success_count' => 0,
                 'failure_count' => 0,
                 'results'       => [],
-                'message'       => 'No Firebase token found in login_otps.device_id',
+                'message'       => 'No Firebase token found.',
             ];
         }
 
@@ -70,18 +137,22 @@ class FirebasePushService
             try {
                 $message = CloudMessage::fromArray([
                     'token' => $token,
+
                     'notification' => [
                         'title' => $title,
                         'body'  => $body,
                     ],
+
                     'data' => $data,
+
                     'android' => [
                         'priority' => 'high',
                         'notification' => [
-                            'sound' => 'default',
+                            'sound'      => 'default',
                             'channel_id' => 'default',
                         ],
                     ],
+
                     'apns' => [
                         'payload' => [
                             'aps' => [
@@ -95,6 +166,11 @@ class FirebasePushService
 
                 $successCount++;
 
+                DeviceToken::where('fcm_token', $token)->update([
+                    'is_active'    => true,
+                    'last_used_at' => now(),
+                ]);
+
                 $results[] = [
                     'token'  => $token,
                     'status' => 'sent',
@@ -107,16 +183,9 @@ class FirebasePushService
                     'error' => $e->getMessage(),
                 ]);
 
-                $msg = strtolower($e->getMessage());
-
-                if (
-                    str_contains($msg, 'not found') ||
-                    str_contains($msg, 'invalid') ||
-                    str_contains($msg, 'registration token') ||
-                    str_contains($msg, 'requested entity was not found')
-                ) {
-                    LoginOtp::where('device_id', $token)->update([
-                        'device_id' => null,
+                if ($this->isInvalidFirebaseTokenError($e->getMessage())) {
+                    DeviceToken::where('fcm_token', $token)->update([
+                        'is_active' => false,
                     ]);
                 }
 
@@ -133,5 +202,16 @@ class FirebasePushService
             'failure_count' => $failureCount,
             'results'       => $results,
         ];
+    }
+
+    private function isInvalidFirebaseTokenError(string $message): bool
+    {
+        $message = strtolower($message);
+
+        return str_contains($message, 'not found') ||
+            str_contains($message, 'invalid') ||
+            str_contains($message, 'registration token') ||
+            str_contains($message, 'requested entity was not found') ||
+            str_contains($message, 'unregistered');
     }
 }
