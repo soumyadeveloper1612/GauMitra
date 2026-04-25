@@ -72,7 +72,6 @@ class NotificationController extends Controller
         ]);
 
         $search = trim($request->q);
-        $tokenColumn = $this->deviceTokenColumn();
 
         $users = User::query()
             ->select('id', 'name', 'mobile', 'status')
@@ -80,10 +79,8 @@ class NotificationController extends Controller
                 'latestAddress:id,user_id,state,district,city,village,area_name,pincode',
             ])
             ->withCount([
-                'deviceTokens as active_devices_count' => function ($query) use ($tokenColumn) {
-                    $query->where('is_active', true)
-                        ->whereNotNull($tokenColumn)
-                        ->where($tokenColumn, '!=', '');
+                'deviceTokens as active_devices_count' => function ($query) {
+                    $query->active()->withNotificationToken();
                 },
             ])
             ->where(function ($query) use ($search) {
@@ -135,13 +132,11 @@ class NotificationController extends Controller
             ], 422);
         }
 
-        $tokenColumn = $this->deviceTokenColumn();
-
         $devices = $this->targetDeviceQuery($request)->get();
 
         $uniqueDevices = $devices
-            ->filter(fn ($device) => !empty($device->{$tokenColumn}))
-            ->unique(fn ($device) => $device->{$tokenColumn})
+            ->filter(fn ($device) => !empty($device->notification_token))
+            ->unique(fn ($device) => $device->notification_token)
             ->values();
 
         return response()->json([
@@ -167,13 +162,11 @@ class NotificationController extends Controller
                 ->withInput();
         }
 
-        $tokenColumn = $this->deviceTokenColumn();
-
         $devices = $this->targetDeviceQuery($request)->get();
 
         $uniqueDevices = $devices
-            ->filter(fn ($device) => !empty($device->{$tokenColumn}))
-            ->unique(fn ($device) => $device->{$tokenColumn})
+            ->filter(fn ($device) => !empty($device->notification_token))
+            ->unique(fn ($device) => $device->notification_token)
             ->values();
 
         if ($uniqueDevices->isEmpty()) {
@@ -200,7 +193,7 @@ class NotificationController extends Controller
 
         try {
             $tokens = $uniqueDevices
-                ->pluck($tokenColumn)
+                ->pluck('notification_token')
                 ->filter()
                 ->unique()
                 ->values()
@@ -216,13 +209,13 @@ class NotificationController extends Controller
             ];
 
             $result = $this->firebasePushService->sendToTokens(
-                tokens: $tokens,
-                title: $campaign->title,
-                body: $campaign->message,
-                data: $payload
+                $tokens,
+                $campaign->title,
+                $campaign->message,
+                $payload
             );
 
-            $deviceByToken = $uniqueDevices->keyBy($tokenColumn);
+            $deviceByToken = $uniqueDevices->keyBy('notification_token');
 
             foreach (($result['results'] ?? []) as $item) {
                 $token = $item['token'] ?? null;
@@ -333,15 +326,12 @@ class NotificationController extends Controller
 
     private function targetDeviceQuery(Request $request)
     {
-        $tokenColumn = $this->deviceTokenColumn();
-
         $query = DeviceToken::query()
-            ->where('is_active', true)
-            ->whereNotNull($tokenColumn)
-            ->where($tokenColumn, '!=', '');
+            ->active()
+            ->withNotificationToken();
 
         if ($request->filled('platform')) {
-            $query->where('platform', $request->platform);
+            $query->platform($request->platform);
         }
 
         if ($request->target_scope === 'users') {
@@ -437,19 +427,6 @@ class NotificationController extends Controller
             ->distinct()
             ->orderBy($column)
             ->pluck($column);
-    }
-
-    private function deviceTokenColumn(): string
-    {
-        if (Schema::hasColumn('device_tokens', 'fcm_token')) {
-            return 'fcm_token';
-        }
-
-        if (Schema::hasColumn('device_tokens', 'token')) {
-            return 'token';
-        }
-
-        return 'fcm_token';
     }
 
     private function currentAdminId(): ?int

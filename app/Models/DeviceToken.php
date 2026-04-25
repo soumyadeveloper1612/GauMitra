@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class DeviceToken extends Model
 {
@@ -27,9 +27,20 @@ class DeviceToken extends Model
         'last_used_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'notification_token',
+    ];
+
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function getNotificationTokenAttribute()
+    {
+        return !empty($this->fcm_token)
+            ? $this->fcm_token
+            : $this->device_id;
     }
 
     public function scopeActive($query)
@@ -37,11 +48,22 @@ class DeviceToken extends Model
         return $query->where('is_active', true);
     }
 
+    public function scopeWithNotificationToken($query)
+    {
+        return $query->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->whereNotNull('fcm_token')
+                    ->where('fcm_token', '!=', '');
+            })->orWhere(function ($sub) {
+                $sub->whereNotNull('device_id')
+                    ->where('device_id', '!=', '');
+            });
+        });
+    }
+
     public function scopeWithFcmToken($query)
     {
-        return $query
-            ->whereNotNull('fcm_token')
-            ->where('fcm_token', '!=', '');
+        return $query->withNotificationToken();
     }
 
     public function scopePlatform($query, ?string $platform)

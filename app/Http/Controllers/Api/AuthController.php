@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DeviceToken;
 use App\Models\LoginOtp;
 use App\Models\User;
 use App\Models\UserAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use App\Models\DeviceToken;
 
 class AuthController extends Controller
 {
@@ -45,10 +45,9 @@ class AuthController extends Controller
 
         $isNewUser = !$existingUser;
 
-        // OTP is mobile number last 4 digits
+        // Testing OTP: last 4 digits of mobile number
         $otp = substr($mobile, -4);
 
-        // Expire previous unused OTPs
         LoginOtp::where('mobile', $mobile)
             ->where('is_used', false)
             ->whereNull('verified_at')
@@ -89,7 +88,19 @@ class AuthController extends Controller
             'otp'       => 'required|digits:4',
             'name'      => 'nullable|string|max:255',
             'platform'  => 'required|string|in:android,ios,web',
-            'device_id' => 'required|string|max:255',
+
+            /*
+             * Your current app sends Firebase token in device_id.
+             * So keep device_id required.
+             */
+            'device_id' => 'required|string|max:1000',
+
+            /*
+             * New recommended field.
+             * If app sends fcm_token, we use it.
+             * If not, we fallback to device_id.
+             */
+            'fcm_token' => 'nullable|string|max:2000',
         ]);
 
         if ($validator->fails()) {
@@ -100,8 +111,19 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $mobile = $request->mobile;
-        $otp    = $request->otp;
+        $mobile   = $request->mobile;
+        $otp      = $request->otp;
+        $platform = $request->platform;
+
+        /*
+         * Important:
+         * Current mobile app stores FCM token in device_id.
+         * So this fixes fcm_token NULL issue.
+         */
+        $deviceId = $request->device_id;
+        $fcmToken = $request->filled('fcm_token')
+            ? $request->fcm_token
+            : $request->device_id;
 
         $user = User::where('mobile', $mobile)->first();
         $isNewUser = false;
@@ -173,46 +195,47 @@ class AuthController extends Controller
             $message = 'Login successful';
         }
 
-        /**
-         * Update login_otps table
+        /*
+         * Update login_otps row.
          */
         $loginOtp->update([
             'user_id'     => $user->id,
-            'platform'    => $request->platform,
-            'device_id'   => $request->device_id,
+            'platform'    => $platform,
+            'device_id'   => $deviceId,
             'verified_at' => now(),
             'is_used'     => true,
         ]);
 
-        /**
-         * Store or update device_tokens table.
-         *
-         * If this user already has a device token row, update platform and device_id.
-         * If not found, insert a new row.
+        /*
+         * Deactivate old duplicate token rows for other users/devices.
+         * This prevents one FCM token being active in multiple rows.
          */
-        $deviceToken = DeviceToken::where('user_id', $user->id)->first();
+        DeviceToken::where('fcm_token', $fcmToken)
+            ->where('user_id', '!=', $user->id)
+            ->update([
+                'is_active' => false,
+            ]);
 
-        if ($deviceToken) {
-            $deviceToken->update([
-                'platform'     => $request->platform,
-                'device_id'    => $request->device_id,
+        /*
+         * Store/update device_tokens table.
+         *
+         * Main fix:
+         * fcm_token will now be saved.
+         */
+        $deviceToken = DeviceToken::updateOrCreate(
+            [
+                'user_id'   => $user->id,
+                'device_id' => $deviceId,
+            ],
+            [
+                'platform'     => $platform,
+                'fcm_token'    => $fcmToken,
                 'is_active'    => true,
                 'last_used_at' => now(),
                 'ip_address'   => $request->ip(),
                 'user_agent'   => $request->userAgent(),
-            ]);
-        } else {
-            $deviceToken = DeviceToken::create([
-                'user_id'      => $user->id,
-                'platform'     => $request->platform,
-                'device_id'    => $request->device_id,
-                'fcm_token'    => null,
-                'is_active'    => true,
-                'last_used_at' => now(),
-                'ip_address'   => $request->ip(),
-                'user_agent'   => $request->userAgent(),
-            ]);
-        }
+            ]
+        );
 
         $token = $user->createToken('user-auth-token')->plainTextToken;
 
@@ -227,8 +250,9 @@ class AuthController extends Controller
                 'token'          => $token,
                 'user'           => $user->fresh(),
                 'mobile'         => $mobile,
-                'platform'       => $request->platform,
-                'device_id'      => $request->device_id,
+                'platform'       => $platform,
+                'device_id'      => $deviceId,
+                'fcm_token'      => $fcmToken,
                 'device_token'   => $deviceToken,
                 'user_exists'    => !$isNewUser,
                 'is_new_user'    => $isNewUser,
@@ -239,11 +263,30 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()?->delete();
+        $user = $request->user();
+
+        if ($user) {
+            $deviceId = $request->input('device_id');
+            $fcmToken = $request->input('fcm_token');
+
+            $query = DeviceToken::where('user_id', $user->id);
+
+            if (!empty($fcmToken)) {
+                $query->where('fcm_token', $fcmToken);
+            } elseif (!empty($deviceId)) {
+                $query->where('device_id', $deviceId);
+            }
+
+            $query->update([
+                'is_active' => false,
+            ]);
+
+            $request->user()->currentAccessToken()?->delete();
+        }
 
         return response()->json([
             'status'  => true,
-            'message' => 'Logout successfully',
+            'message' => 'Logout successful',
         ]);
     }
 }

@@ -7,8 +7,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\CloudMessage;
-use Throwable;
 use Kreait\Firebase\Messaging\Notification;
+use Throwable;
 
 class FirebasePushService
 {
@@ -175,6 +175,4 @@ class FirebasePushService
             str_contains($message, 'requested entity was not found') ||
             str_contains($message, 'unregistered');
     }
-
-    
 }
