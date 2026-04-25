@@ -13,7 +13,7 @@ use App\Http\Controllers\Admin\NewsNoticeController;
 use App\Http\Controllers\Admin\SidebarMenuController;
 use App\Http\Controllers\Admin\MenuAccessController;
 use App\Http\Controllers\Admin\AnimalTreatmentGuideController;
-
+use App\Http\Controllers\Admin\NotificationController;
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
@@ -170,6 +170,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/{sidebar_menu}/edit', [SidebarMenuController::class, 'edit'])->name('edit');
             Route::put('/{sidebar_menu}', [SidebarMenuController::class, 'update'])->name('update');
             Route::delete('/{sidebar_menu}', [SidebarMenuController::class, 'destroy'])->name('destroy');
+        });
+
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+            Route::get('/', [NotificationController::class, 'index'])->name('index');
+            Route::post('/preview', [NotificationController::class, 'preview'])->name('preview');
+            Route::post('/send', [NotificationController::class, 'send'])->name('send');
         });
     });
 });
