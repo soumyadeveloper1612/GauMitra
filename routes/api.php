@@ -34,7 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user-addresses/{id}', [UserAddressController::class, 'show']);
     Route::put('/user-edit-address/{id}', [UserAddressController::class, 'update']);
     Route::delete('/user-delete-addresses/{id}', [UserAddressController::class, 'destroy']);
-
+    
     /*
     |--------------------------------------------------------------------------
     | Emergency Case APIs
@@ -44,6 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/emergency-cases', [EmergencyCaseController::class, 'index']);
     Route::post('/emergency-cases', [EmergencyCaseController::class, 'store']);
     Route::get('/emergency-cases/{id}', [EmergencyCaseController::class, 'show']);
+
 
     Route::post('/emergency-cases/{id}/accept', [EmergencyCaseController::class, 'accept']);
     Route::post('/emergency-cases/{id}/status', [EmergencyCaseController::class, 'updateStatus']);

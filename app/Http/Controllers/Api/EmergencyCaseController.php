@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use App\Models\UserAddress;
 
 class EmergencyCaseController extends Controller
 {
@@ -21,18 +22,222 @@ class EmergencyCaseController extends Controller
     ) {
     }
 
+
     public function index(Request $request)
     {
-        $cases = EmergencyCase::with(['reporter:id,name,mobile', 'currentHandler:id,name,mobile'])
-            ->when($request->status, fn($q) => $q->where('status', $request->status))
-            ->when($request->case_type, fn($q) => $q->where('case_type', $request->case_type))
-            ->latest()
-            ->paginate(20);
+        try {
+            $user = $request->user();
 
-        return response()->json([
-            'status' => true,
-            'data' => $cases,
-        ]);
+            $perPage = (int) $request->query('per_page', 20);
+            $perPage = $perPage > 100 ? 100 : $perPage;
+
+            $radiusKm = (float) $request->query('radius_km', 20);
+
+            $userAddress = UserAddress::where('user_id', $user->id)
+                ->where('status', '!=', 'deleted')
+                ->latest()
+                ->first();
+
+            $query = EmergencyCase::query()
+                ->with([
+                    'reporter:id,name,mobile',
+                    'currentHandler:id,name,mobile',
+                    'media',
+                ])
+                ->select('emergency_cases.*');
+
+            /*
+            |--------------------------------------------------------------------------
+            | Optional Filters
+            |--------------------------------------------------------------------------
+            */
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('case_type')) {
+                $query->where('case_type', $request->case_type);
+            }
+
+            if ($request->filled('severity')) {
+                $query->where('severity', $request->severity);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | If User Has No Address
+            |--------------------------------------------------------------------------
+            */
+
+            if (!$userAddress) {
+                $cases = $query
+                    ->selectRaw('NULL as distance_km')
+                    ->selectRaw('5 as address_priority')
+                    ->latest()
+                    ->paginate($perPage);
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Emergency cases fetched successfully. User address not found, showing latest reports.',
+                    'user_address' => null,
+                    'data' => $cases,
+                ]);
+            }
+
+            $area = strtolower(trim((string) $userAddress->area_name));
+            $city = strtolower(trim((string) $userAddress->city));
+            $district = strtolower(trim((string) $userAddress->district));
+            $state = strtolower(trim((string) $userAddress->state));
+
+            $hasCoordinates = !empty($userAddress->latitude) && !empty($userAddress->longitude);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Same Area / City / District Priority
+            |--------------------------------------------------------------------------
+            */
+
+            $query->selectRaw(
+                "CASE 
+                    WHEN ? != '' AND LOWER(TRIM(COALESCE(area_name, ''))) = ? THEN 1 
+                    ELSE 0 
+                END as same_area",
+                [$area, $area]
+            );
+
+            $query->selectRaw(
+                "CASE 
+                    WHEN ? != '' AND LOWER(TRIM(COALESCE(city, ''))) = ? THEN 1 
+                    ELSE 0 
+                END as same_city",
+                [$city, $city]
+            );
+
+            $query->selectRaw(
+                "CASE 
+                    WHEN ? != '' AND LOWER(TRIM(COALESCE(district, ''))) = ? THEN 1 
+                    ELSE 0 
+                END as same_district",
+                [$district, $district]
+            );
+
+            $query->selectRaw(
+                "CASE 
+                    WHEN ? != '' AND LOWER(TRIM(COALESCE(state, ''))) = ? THEN 1 
+                    ELSE 0 
+                END as same_state",
+                [$state, $state]
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Distance Calculation Using Latitude / Longitude
+            |--------------------------------------------------------------------------
+            */
+
+            if ($hasCoordinates) {
+                $lat = (float) $userAddress->latitude;
+                $lng = (float) $userAddress->longitude;
+
+                $distanceSql = "
+                    (
+                        6371 * ACOS(
+                            LEAST(1, GREATEST(-1,
+                                COS(RADIANS(?)) 
+                                * COS(RADIANS(latitude)) 
+                                * COS(RADIANS(longitude) - RADIANS(?)) 
+                                + SIN(RADIANS(?)) 
+                                * SIN(RADIANS(latitude))
+                            ))
+                        )
+                    )
+                ";
+
+                $query->selectRaw("$distanceSql as distance_km", [$lat, $lng, $lat]);
+
+                $query->selectRaw(
+                    "CASE
+                        WHEN ? != '' AND LOWER(TRIM(COALESCE(area_name, ''))) = ? THEN 1
+                        WHEN ? != '' AND LOWER(TRIM(COALESCE(city, ''))) = ? THEN 2
+                        WHEN ? != '' AND LOWER(TRIM(COALESCE(district, ''))) = ? THEN 3
+                        WHEN latitude IS NOT NULL 
+                            AND longitude IS NOT NULL 
+                            AND $distanceSql <= ? THEN 4
+                        ELSE 5
+                    END as address_priority",
+                    [
+                        $area, $area,
+                        $city, $city,
+                        $district, $district,
+                        $lat, $lng, $lat,
+                        $radiusKm,
+                    ]
+                );
+
+                $query->orderBy('address_priority', 'asc')
+                    ->orderByRaw('distance_km IS NULL asc')
+                    ->orderBy('distance_km', 'asc')
+                    ->latest('created_at');
+            } else {
+                $query->selectRaw('NULL as distance_km');
+
+                $query->selectRaw(
+                    "CASE
+                        WHEN ? != '' AND LOWER(TRIM(COALESCE(area_name, ''))) = ? THEN 1
+                        WHEN ? != '' AND LOWER(TRIM(COALESCE(city, ''))) = ? THEN 2
+                        WHEN ? != '' AND LOWER(TRIM(COALESCE(district, ''))) = ? THEN 3
+                        ELSE 5
+                    END as address_priority",
+                    [
+                        $area, $area,
+                        $city, $city,
+                        $district, $district,
+                    ]
+                );
+
+                $query->orderBy('address_priority', 'asc')
+                    ->latest('created_at');
+            }
+
+            $cases = $query->paginate($perPage);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Emergency cases fetched address wise successfully',
+                'user_address' => [
+                    'id' => $userAddress->id,
+                    'area_name' => $userAddress->area_name,
+                    'city' => $userAddress->city,
+                    'district' => $userAddress->district,
+                    'state' => $userAddress->state,
+                    'latitude' => $userAddress->latitude,
+                    'longitude' => $userAddress->longitude,
+                ],
+                'priority_meaning' => [
+                    1 => 'Same area',
+                    2 => 'Same city',
+                    3 => 'Same district',
+                    4 => 'Nearby location',
+                    5 => 'Other cases',
+                ],
+                'data' => $cases,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Emergency case address wise fetch failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Server Error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function store(Request $request)

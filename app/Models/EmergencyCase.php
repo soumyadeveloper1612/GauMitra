@@ -50,6 +50,8 @@ class EmergencyCase extends Model
     ];
 
     protected $casts = [
+        'latitude' => 'decimal:7',
+        'longitude' => 'decimal:7',
         'accepted_at' => 'datetime',
         'en_route_at' => 'datetime',
         'reached_at' => 'datetime',

@@ -39,11 +39,7 @@ class User extends Authenticatable
         return $this->hasMany(LoginOtp::class);
     }
 
-    public function addresses()
-    {
-        return $this->hasMany(UserAddress::class)
-            ->where('status', '!=', 'deleted');
-    }
+   
 
     public function latestAddress()
     {
@@ -56,4 +52,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(\App\Models\DeviceToken::class);
     }
+
+public function addresses()
+{
+    return $this->hasMany(UserAddress::class, 'user_id')
+        ->where('status', '!=', 'deleted');
+}
+
 }
