@@ -9,6 +9,7 @@ use App\Models\UserAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use App\Models\DeviceToken;
 
 class AuthController extends Controller
 {
@@ -163,7 +164,6 @@ class AuthController extends Controller
                 'last_login_at'      => now(),
             ];
 
-            // If old user name is empty, update name from verify OTP request
             if ($request->filled('name') && empty($user->name)) {
                 $updateData['name'] = $request->name;
             }
@@ -173,8 +173,9 @@ class AuthController extends Controller
             $message = 'Login successful';
         }
 
-        // Save only platform and device_id during verify OTP.
-        // No FCM token save logic here.
+        /**
+         * Update login_otps table
+         */
         $loginOtp->update([
             'user_id'     => $user->id,
             'platform'    => $request->platform,
@@ -182,6 +183,36 @@ class AuthController extends Controller
             'verified_at' => now(),
             'is_used'     => true,
         ]);
+
+        /**
+         * Store or update device_tokens table.
+         *
+         * If this user already has a device token row, update platform and device_id.
+         * If not found, insert a new row.
+         */
+        $deviceToken = DeviceToken::where('user_id', $user->id)->first();
+
+        if ($deviceToken) {
+            $deviceToken->update([
+                'platform'     => $request->platform,
+                'device_id'    => $request->device_id,
+                'is_active'    => true,
+                'last_used_at' => now(),
+                'ip_address'   => $request->ip(),
+                'user_agent'   => $request->userAgent(),
+            ]);
+        } else {
+            $deviceToken = DeviceToken::create([
+                'user_id'      => $user->id,
+                'platform'     => $request->platform,
+                'device_id'    => $request->device_id,
+                'fcm_token'    => null,
+                'is_active'    => true,
+                'last_used_at' => now(),
+                'ip_address'   => $request->ip(),
+                'user_agent'   => $request->userAgent(),
+            ]);
+        }
 
         $token = $user->createToken('user-auth-token')->plainTextToken;
 
@@ -198,6 +229,7 @@ class AuthController extends Controller
                 'mobile'         => $mobile,
                 'platform'       => $request->platform,
                 'device_id'      => $request->device_id,
+                'device_token'   => $deviceToken,
                 'user_exists'    => !$isNewUser,
                 'is_new_user'    => $isNewUser,
                 'address_exists' => $addressExists,
