@@ -235,6 +235,7 @@ class NotificationController extends Controller
 
             $successCount = (int) ($result['success_count'] ?? 0);
             $failureCount = (int) ($result['failure_count'] ?? 0);
+            $firstError = $result['first_error'] ?? null;
 
             $status = 'failed';
 
@@ -249,14 +250,20 @@ class NotificationController extends Controller
                 'success_count' => $successCount,
                 'failure_count' => $failureCount,
                 'sent_at'       => now(),
-                'error_message' => $status === 'failed'
-                    ? ($result['message'] ?? 'Notification sending failed.')
+                'error_message' => $failureCount > 0
+                    ? ($firstError ?: ($result['message'] ?? 'Notification sending failed.'))
                     : null,
             ]);
 
+            if ($successCount > 0) {
+                return redirect()
+                    ->route('admin.notifications.index')
+                    ->with('success', "Notification sent. Success: {$successCount}, Failed: {$failureCount}");
+            }
+
             return redirect()
                 ->route('admin.notifications.index')
-                ->with('success', "Notification sent. Success: {$successCount}, Failed: {$failureCount}");
+                ->with('error', 'Notification failed: ' . ($firstError ?: 'Firebase rejected all tokens.'));
         } catch (Throwable $e) {
             $campaign->update([
                 'status'        => 'failed',

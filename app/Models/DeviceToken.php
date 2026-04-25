@@ -38,9 +38,11 @@ class DeviceToken extends Model
 
     public function getNotificationTokenAttribute()
     {
-        return !empty($this->fcm_token)
-            ? $this->fcm_token
-            : $this->device_id;
+        if (!empty($this->fcm_token)) {
+            return $this->fcm_token;
+        }
+
+        return $this->device_id;
     }
 
     public function scopeActive($query)
