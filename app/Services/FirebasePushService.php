@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\CloudMessage;
+use Throwable;
+use Kreait\Firebase\Messaging\Notification;
 
 class FirebasePushService
 {
@@ -106,28 +108,24 @@ class FirebasePushService
      */
     public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
     {
-        $tokens = collect($tokens)
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+        $tokens = array_values(array_unique(array_filter($tokens)));
 
         if (empty($tokens)) {
             return [
                 'success_count' => 0,
                 'failure_count' => 0,
                 'results'       => [],
-                'message'       => 'No Firebase token found.',
+                'message'       => 'No Firebase tokens found.',
             ];
         }
 
-        $data = collect($data)->map(function ($value) {
-            if (is_array($value) || is_object($value)) {
-                return json_encode($value);
-            }
+        $stringData = [];
 
-            return (string) $value;
-        })->toArray();
+        foreach ($data as $key => $value) {
+            $stringData[$key] = is_scalar($value)
+                ? (string) $value
+                : json_encode($value);
+        }
 
         $successCount = 0;
         $failureCount = 0;
@@ -135,59 +133,21 @@ class FirebasePushService
 
         foreach ($tokens as $token) {
             try {
-                $message = CloudMessage::fromArray([
-                    'token' => $token,
-
-                    'notification' => [
-                        'title' => $title,
-                        'body'  => $body,
-                    ],
-
-                    'data' => $data,
-
-                    'android' => [
-                        'priority' => 'high',
-                        'notification' => [
-                            'sound'      => 'default',
-                            'channel_id' => 'default',
-                        ],
-                    ],
-
-                    'apns' => [
-                        'payload' => [
-                            'aps' => [
-                                'sound' => 'default',
-                            ],
-                        ],
-                    ],
-                ]);
+                $message = CloudMessage::withTarget('token', $token)
+                    ->withNotification(Notification::create($title, $body))
+                    ->withData($stringData);
 
                 $this->messaging->send($message);
 
                 $successCount++;
 
-                DeviceToken::where('fcm_token', $token)->update([
-                    'is_active'    => true,
-                    'last_used_at' => now(),
-                ]);
-
                 $results[] = [
-                    'token'  => $token,
-                    'status' => 'sent',
+                    'token'   => $token,
+                    'status'  => 'sent',
+                    'message' => 'Notification sent successfully',
                 ];
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $failureCount++;
-
-                Log::warning('FCM send failed', [
-                    'token' => $token,
-                    'error' => $e->getMessage(),
-                ]);
-
-                if ($this->isInvalidFirebaseTokenError($e->getMessage())) {
-                    DeviceToken::where('fcm_token', $token)->update([
-                        'is_active' => false,
-                    ]);
-                }
 
                 $results[] = [
                     'token'   => $token,
@@ -201,6 +161,7 @@ class FirebasePushService
             'success_count' => $successCount,
             'failure_count' => $failureCount,
             'results'       => $results,
+            'message'       => 'Notification process completed.',
         ];
     }
 
@@ -214,4 +175,6 @@ class FirebasePushService
             str_contains($message, 'requested entity was not found') ||
             str_contains($message, 'unregistered');
     }
+
+    
 }

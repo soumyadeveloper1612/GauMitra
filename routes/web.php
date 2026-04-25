@@ -176,6 +176,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', [NotificationController::class, 'index'])->name('index');
             Route::post('/preview', [NotificationController::class, 'preview'])->name('preview');
             Route::post('/send', [NotificationController::class, 'send'])->name('send');
+
+            // New AJAX routes
+            Route::get('/address-options', [NotificationController::class, 'addressOptions'])->name('address-options');
+            Route::get('/search-users', [NotificationController::class, 'searchUsers'])->name('search-users');
         });
     });
 });
