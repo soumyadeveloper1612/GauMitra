@@ -41,7 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/emergency-cases', [EmergencyCaseController::class, 'index']);
+    Route::get('/get-emergency-cases', [EmergencyCaseController::class, 'index']);
     Route::post('/emergency-cases', [EmergencyCaseController::class, 'store']);
     Route::get('/emergency-cases/{id}', [EmergencyCaseController::class, 'show']);
 
