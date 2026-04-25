@@ -38,11 +38,9 @@ class DeviceToken extends Model
 
     public function getNotificationTokenAttribute()
     {
-        if (!empty($this->fcm_token)) {
-            return $this->fcm_token;
-        }
-
-        return $this->device_id;
+        return !empty($this->fcm_token)
+            ? $this->fcm_token
+            : $this->device_id;
     }
 
     public function scopeActive($query)
@@ -63,24 +61,10 @@ class DeviceToken extends Model
         });
     }
 
-    public function scopeWithFcmToken($query)
-    {
-        return $query->withNotificationToken();
-    }
-
     public function scopePlatform($query, ?string $platform)
     {
         if (!empty($platform)) {
             return $query->where('platform', $platform);
-        }
-
-        return $query;
-    }
-
-    public function scopeDevice($query, ?string $deviceId)
-    {
-        if (!empty($deviceId)) {
-            return $query->where('device_id', $deviceId);
         }
 
         return $query;

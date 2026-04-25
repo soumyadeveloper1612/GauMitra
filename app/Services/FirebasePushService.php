@@ -21,8 +21,8 @@ class FirebasePushService
         string $title,
         string $body,
         array $data = [],
-        ?string $platform = null,
-        ?string $deviceId = null
+        ?string $imageUrl = null,
+        ?string $platform = null
     ): array {
         $query = DeviceToken::query()
             ->where('user_id', $user->id)
@@ -33,20 +33,12 @@ class FirebasePushService
             $query->platform($platform);
         }
 
-        if (!empty($deviceId)) {
-            $query->device($deviceId);
-        }
+        $latestDevice = $query
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('id')
+            ->first();
 
-        $tokens = $query
-            ->latest('last_used_at')
-            ->get()
-            ->map(fn ($device) => $device->notification_token)
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
-
-        if (empty($tokens)) {
+        if (!$latestDevice || empty($latestDevice->notification_token)) {
             return [
                 'success_count' => 0,
                 'failure_count' => 0,
@@ -56,45 +48,22 @@ class FirebasePushService
             ];
         }
 
-        return $this->sendToTokens($tokens, $title, $body, $data);
-    }
-
-    public function sendToUserPlatform(
-        User $user,
-        string $platform,
-        string $title,
-        string $body,
-        array $data = []
-    ): array {
-        return $this->sendToUser(
-            user: $user,
+        return $this->sendToTokens(
+            tokens: [$latestDevice->notification_token],
             title: $title,
             body: $body,
             data: $data,
-            platform: $platform
+            imageUrl: $imageUrl
         );
     }
 
-    public function sendToUserDevice(
-        User $user,
-        string $deviceId,
+    public function sendToTokens(
+        array $tokens,
         string $title,
         string $body,
         array $data = [],
-        ?string $platform = null
+        ?string $imageUrl = null
     ): array {
-        return $this->sendToUser(
-            user: $user,
-            title: $title,
-            body: $body,
-            data: $data,
-            platform: $platform,
-            deviceId: $deviceId
-        );
-    }
-
-    public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
-    {
         $tokens = array_values(array_unique(array_filter($tokens)));
 
         if (empty($tokens)) {
@@ -107,9 +76,6 @@ class FirebasePushService
             ];
         }
 
-        /*
-         * Firebase data payload must contain string values only.
-         */
         $stringData = [];
 
         foreach ($data as $key => $value) {
@@ -122,6 +88,10 @@ class FirebasePushService
             }
         }
 
+        if (!empty($imageUrl)) {
+            $stringData['image_url'] = $imageUrl;
+        }
+
         $successCount = 0;
         $failureCount = 0;
         $results = [];
@@ -129,29 +99,26 @@ class FirebasePushService
 
         foreach ($tokens as $token) {
             try {
-                /*
-                 * Important:
-                 * Do not use withNotification() / withData().
-                 * Your installed Kreait version is throwing undefined method error.
-                 */
-                $message = CloudMessage::fromArray([
-                    'token' => $token,
+                $notification = [
+                    'title' => $title,
+                    'body'  => $body,
+                ];
 
-                    'notification' => [
-                        'title' => $title,
-                        'body'  => $body,
-                    ],
+                if (!empty($imageUrl)) {
+                    $notification['image'] = $imageUrl;
+                }
 
-                    'data' => $stringData,
-
-                    'android' => [
-                        'priority' => 'high',
+                $messageArray = [
+                    'token'        => $token,
+                    'notification' => $notification,
+                    'data'         => $stringData,
+                    'android'      => [
+                        'priority'     => 'high',
                         'notification' => [
                             'sound'      => 'default',
                             'channel_id' => 'default',
                         ],
                     ],
-
                     'apns' => [
                         'payload' => [
                             'aps' => [
@@ -159,7 +126,16 @@ class FirebasePushService
                             ],
                         ],
                     ],
-                ]);
+                ];
+
+                if (!empty($imageUrl)) {
+                    $messageArray['android']['notification']['image'] = $imageUrl;
+                    $messageArray['apns']['fcm_options'] = [
+                        'image' => $imageUrl,
+                    ];
+                }
+
+                $message = CloudMessage::fromArray($messageArray);
 
                 $this->messaging->send($message);
 
@@ -209,15 +185,13 @@ class FirebasePushService
             }
         }
 
-        $message = $successCount > 0
-            ? 'Notification process completed.'
-            : ($firstError ?: 'Firebase notification failed.');
-
         return [
             'success_count' => $successCount,
             'failure_count' => $failureCount,
             'results'       => $results,
-            'message'       => $message,
+            'message'       => $successCount > 0
+                ? 'Notification process completed.'
+                : ($firstError ?: 'Firebase notification failed.'),
             'first_error'   => $firstError,
         ];
     }

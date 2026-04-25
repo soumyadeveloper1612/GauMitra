@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Throwable;
 
 class NotificationController extends Controller
@@ -122,7 +123,7 @@ class NotificationController extends Controller
 
     public function preview(Request $request)
     {
-        $validator = $this->notificationValidator($request);
+        $validator = $this->notificationValidator($request, false);
 
         if ($validator->fails()) {
             return response()->json([
@@ -132,12 +133,7 @@ class NotificationController extends Controller
             ], 422);
         }
 
-        $devices = $this->targetDeviceQuery($request)->get();
-
-        $uniqueDevices = $devices
-            ->filter(fn ($device) => !empty($device->notification_token))
-            ->unique(fn ($device) => $device->notification_token)
-            ->values();
+        $uniqueDevices = $this->getUniqueLatestDevices($request);
 
         return response()->json([
             'status'  => true,
@@ -154,7 +150,7 @@ class NotificationController extends Controller
 
     public function send(Request $request)
     {
-        $validator = $this->notificationValidator($request);
+        $validator = $this->notificationValidator($request, true);
 
         if ($validator->fails()) {
             return back()
@@ -162,12 +158,7 @@ class NotificationController extends Controller
                 ->withInput();
         }
 
-        $devices = $this->targetDeviceQuery($request)->get();
-
-        $uniqueDevices = $devices
-            ->filter(fn ($device) => !empty($device->notification_token))
-            ->unique(fn ($device) => $device->notification_token)
-            ->values();
+        $uniqueDevices = $this->getUniqueLatestDevices($request);
 
         if ($uniqueDevices->isEmpty()) {
             return back()
@@ -175,13 +166,15 @@ class NotificationController extends Controller
                 ->with('error', 'No active device token found for selected target.');
         }
 
+        $imageUrl = $this->uploadNotificationImage($request);
+
         $campaign = NotificationCampaign::create([
             'notification_type' => $request->notification_type,
             'title'             => $request->title,
             'message'           => $request->message,
             'target_scope'      => $request->target_scope,
             'target_filters'    => $this->targetFiltersFromRequest($request),
-            'image_url'         => $request->image_url,
+            'image_url'         => $imageUrl,
             'action_url'        => $request->action_url,
             'related_type'      => $request->related_type,
             'related_id'        => $request->related_id,
@@ -206,13 +199,15 @@ class NotificationController extends Controller
                 'related_type'      => $campaign->related_type ?? '',
                 'related_id'        => $campaign->related_id ? (string) $campaign->related_id : '',
                 'action_url'        => $campaign->action_url ?? '',
+                'image_url'         => $campaign->image_url ?? '',
             ];
 
             $result = $this->firebasePushService->sendToTokens(
-                $tokens,
-                $campaign->title,
-                $campaign->message,
-                $payload
+                tokens: $tokens,
+                title: $campaign->title,
+                body: $campaign->message,
+                data: $payload,
+                imageUrl: $campaign->image_url
             );
 
             $deviceByToken = $uniqueDevices->keyBy('notification_token');
@@ -277,28 +272,66 @@ class NotificationController extends Controller
         }
     }
 
-    private function notificationValidator(Request $request)
+    private function getUniqueLatestDevices(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        return $this->targetDeviceQuery($request)
+            ->get()
+            ->filter(fn ($device) => !empty($device->notification_token))
+            ->sortByDesc(fn ($device) => optional($device->last_used_at)->timestamp ?: $device->id)
+            ->unique('user_id')
+            ->unique(fn ($device) => $device->notification_token)
+            ->values();
+    }
+
+    private function uploadNotificationImage(Request $request): ?string
+    {
+        if ($request->hasFile('notification_image')) {
+            $file = $request->file('notification_image');
+
+            $folder = public_path('uploads/notification-images');
+
+            if (!is_dir($folder)) {
+                mkdir($folder, 0775, true);
+            }
+
+            $fileName = 'notification_' . time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+
+            $file->move($folder, $fileName);
+
+            return asset('uploads/notification-images/' . $fileName);
+        }
+
+        if ($request->filled('image_url')) {
+            return $request->image_url;
+        }
+
+        return null;
+    }
+
+    private function notificationValidator(Request $request, bool $validateImage = true)
+    {
+        $rules = [
             'notification_type' => 'required|string|in:general,case_report,news_notice,rescue_alert,legal_awareness,gaushala_requirement,weather_alert,custom',
             'title'             => 'required|string|max:150',
             'message'           => 'required|string|max:500',
-
             'target_scope'      => 'required|string|in:all,area,users',
             'platform'          => 'nullable|string|in:android,ios,web',
-
             'state'             => 'nullable|string|max:120',
             'district'          => 'nullable|string|max:120',
             'area_name'         => 'nullable|string|max:150',
-
             'selected_user_ids'   => 'nullable|array',
             'selected_user_ids.*' => 'integer|exists:users,id',
-
-            'image_url'         => 'nullable|string|max:255',
+            'image_url'         => 'nullable|url|max:500',
             'action_url'        => 'nullable|string|max:255',
             'related_type'      => 'nullable|string|in:custom,emergency_case,news_notice',
             'related_id'        => 'nullable|integer',
-        ]);
+        ];
+
+        if ($validateImage) {
+            $rules['notification_image'] = 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         $validator->after(function ($validator) use ($request) {
             if ($request->target_scope === 'area') {
@@ -380,7 +413,9 @@ class NotificationController extends Controller
             });
         }
 
-        return $query->orderByDesc('last_used_at');
+        return $query
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('id');
     }
 
     private function targetFiltersFromRequest(Request $request): array

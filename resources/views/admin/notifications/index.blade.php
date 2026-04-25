@@ -138,6 +138,11 @@
         opacity: .95;
     }
 
+    .btn-send:disabled {
+        opacity: .65;
+        cursor: not-allowed;
+    }
+
     .btn-preview {
         border-radius: 14px;
         padding: 12px 18px;
@@ -217,6 +222,14 @@
         font-size: 11px;
         font-weight: 800;
     }
+
+    .image-preview-box img {
+        width: 100%;
+        max-height: 170px;
+        object-fit: cover;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+    }
 </style>
 
 <div class="container-fluid">
@@ -261,18 +274,21 @@
                             <span>Total</span>
                         </div>
                     </div>
+
                     <div class="col-6 col-md-3">
                         <div class="stat-box">
                             <h3>{{ $stats['sent'] }}</h3>
                             <span>Sent</span>
                         </div>
                     </div>
+
                     <div class="col-6 col-md-3">
                         <div class="stat-box">
                             <h3>{{ $stats['partially_failed'] }}</h3>
                             <span>Partial</span>
                         </div>
                     </div>
+
                     <div class="col-6 col-md-3">
                         <div class="stat-box">
                             <h3>{{ $stats['failed'] }}</h3>
@@ -284,7 +300,10 @@
         </div>
     </div>
 
-    <form id="notificationForm" action="{{ route('admin.notifications.send') }}" method="POST">
+    <form id="notificationForm"
+          action="{{ route('admin.notifications.send') }}"
+          method="POST"
+          enctype="multipart/form-data">
         @csrf
 
         <div class="row g-4">
@@ -296,6 +315,7 @@
 
                     <div class="notify-card-body">
                         <div class="row g-3">
+
                             <div class="col-md-6">
                                 <label class="form-label">Notification Type</label>
                                 <select name="notification_type" class="form-select" required>
@@ -362,12 +382,31 @@
                             </div>
 
                             <div class="col-md-6">
+                                <label class="form-label">Upload Notification Photo</label>
+                                <input type="file"
+                                       name="notification_image"
+                                       id="notificationImage"
+                                       class="form-control"
+                                       accept="image/png,image/jpeg,image/jpg,image/webp">
+                                <div class="small-help mt-1">
+                                    Optional. JPG, PNG, WEBP allowed. Max 2MB.
+                                </div>
+
+                                <div id="imagePreviewWrap" class="image-preview-box mt-2" style="display:none;">
+                                    <img id="imagePreview" src="" alt="Notification image preview">
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
                                 <label class="form-label">Image URL</label>
-                                <input type="text"
+                                <input type="url"
                                        name="image_url"
                                        class="form-control"
                                        value="{{ old('image_url') }}"
                                        placeholder="Optional image URL">
+                                <div class="small-help mt-1">
+                                    Use this only if image is already hosted online.
+                                </div>
                             </div>
 
                             <div class="col-md-6">
@@ -378,6 +417,7 @@
                                        value="{{ old('action_url') }}"
                                        placeholder="Example: gaumitra://case/12">
                             </div>
+
                         </div>
                     </div>
                 </div>
@@ -497,7 +537,7 @@
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">
-                            <button type="submit" class="btn btn-send">
+                            <button type="submit" id="sendBtn" class="btn btn-send">
                                 Send Notification Now
                             </button>
                         </div>
@@ -508,7 +548,7 @@
             <div class="col-xl-4">
                 <div class="notify-card">
                     <div class="notify-card-header">
-                        <h5 class="mb-0 fw-bold">New Target Options</h5>
+                        <h5 class="mb-0 fw-bold">Target Options</h5>
                     </div>
                     <div class="notify-card-body">
                         <div class="mb-3">
@@ -525,10 +565,17 @@
                             </p>
                         </div>
 
-                        <div>
+                        <div class="mb-3">
                             <div class="section-title">Selected Registered Users</div>
                             <p class="small-help mb-0">
                                 Search user by name or mobile number and send custom notification to selected users.
+                            </p>
+                        </div>
+
+                        <div>
+                            <div class="section-title">Photo Notification</div>
+                            <p class="small-help mb-0">
+                                Upload a photo or paste an image URL to send rich notification content.
                             </p>
                         </div>
                     </div>
@@ -544,6 +591,7 @@
                             <li>Use area-wise filter for emergency alerts.</li>
                             <li>Use selected user filter for personal/custom alerts.</li>
                             <li>Make sure users have active Firebase token.</li>
+                            <li>Click send only once; button locks while sending.</li>
                         </ul>
                     </div>
                 </div>
@@ -571,6 +619,7 @@
                         <th>Status</th>
                     </tr>
                 </thead>
+
                 <tbody>
                     @forelse($campaigns as $campaign)
                         <tr>
@@ -583,6 +632,14 @@
                             <td>
                                 <strong>{{ $campaign->title }}</strong>
                                 <div class="small-help">{{ Str::limit($campaign->message, 70) }}</div>
+
+                                @if($campaign->image_url)
+                                    <div class="mt-1">
+                                        <a href="{{ $campaign->image_url }}" target="_blank" class="small">
+                                            View image
+                                        </a>
+                                    </div>
+                                @endif
                             </td>
                             <td>
                                 <span class="badge bg-light text-dark">
@@ -640,6 +697,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const areaFilters = document.getElementById('areaFilters');
     const userFilters = document.getElementById('userFilters');
     const previewBtn = document.getElementById('previewBtn');
+    const sendBtn = document.getElementById('sendBtn');
     const form = document.getElementById('notificationForm');
     const previewResult = document.getElementById('previewResult');
 
@@ -654,8 +712,28 @@ document.addEventListener('DOMContentLoaded', function () {
     const selectedUsersInputs = document.getElementById('selectedUsersInputs');
     const clearUserSearchBtn = document.getElementById('clearUserSearchBtn');
 
+    const notificationImage = document.getElementById('notificationImage');
+    const imagePreviewWrap = document.getElementById('imagePreviewWrap');
+    const imagePreview = document.getElementById('imagePreview');
+
     let selectedUsers = {};
     let searchTimer = null;
+    let isSubmitting = false;
+
+    if (notificationImage) {
+        notificationImage.addEventListener('change', function () {
+            const file = this.files && this.files[0];
+
+            if (!file) {
+                imagePreviewWrap.style.display = 'none';
+                imagePreview.src = '';
+                return;
+            }
+
+            imagePreview.src = URL.createObjectURL(file);
+            imagePreviewWrap.style.display = 'block';
+        });
+    }
 
     function toggleTargetPanels() {
         areaFilters.style.display = 'none';
@@ -677,6 +755,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const payload = {};
 
         formData.forEach((value, key) => {
+            if (value instanceof File) {
+                return;
+            }
+
             if (key.endsWith('[]')) {
                 const cleanKey = key.replace('[]', '');
 
@@ -786,14 +868,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             chip.appendChild(text);
             chip.appendChild(removeBtn);
-
             selectedUsersList.appendChild(chip);
 
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = 'selected_user_ids[]';
             input.value = user.id;
-
             selectedUsersInputs.appendChild(input);
         });
     }
@@ -838,6 +918,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 : 'No Active Device';
 
             badgeWrap.appendChild(badge);
+
             left.appendChild(name);
             left.appendChild(mobile);
             left.appendChild(address);
@@ -977,6 +1058,21 @@ document.addEventListener('DOMContentLoaded', function () {
     form.addEventListener('submit', function (e) {
         e.preventDefault();
 
+        if (isSubmitting) {
+            return;
+        }
+
+        const submitNow = () => {
+            isSubmitting = true;
+
+            if (sendBtn) {
+                sendBtn.disabled = true;
+                sendBtn.innerText = 'Sending...';
+            }
+
+            form.submit();
+        };
+
         if (typeof Swal !== 'undefined') {
             Swal.fire({
                 title: 'Send notification?',
@@ -988,12 +1084,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 confirmButtonColor: '#16a34a'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    form.submit();
+                    submitNow();
                 }
             });
         } else {
             if (confirm('Send notification now?')) {
-                form.submit();
+                submitNow();
             }
         }
     });

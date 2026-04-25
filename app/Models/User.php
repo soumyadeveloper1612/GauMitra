@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\DeviceToken;
+use App\Models\LoginOtp;
+use App\Models\UserAddress;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\UserAddress;
-use App\Models\LoginOtp;
 
 class User extends Authenticatable
 {
@@ -39,24 +40,21 @@ class User extends Authenticatable
         return $this->hasMany(LoginOtp::class);
     }
 
-   
+    public function addresses()
+    {
+        return $this->hasMany(UserAddress::class, 'user_id')
+            ->where('status', '!=', 'deleted');
+    }
 
     public function latestAddress()
     {
-        return $this->hasOne(UserAddress::class)
+        return $this->hasOne(UserAddress::class, 'user_id')
             ->where('status', '!=', 'deleted')
             ->latestOfMany();
     }
 
     public function deviceTokens()
     {
-        return $this->hasMany(\App\Models\DeviceToken::class);
+        return $this->hasMany(DeviceToken::class, 'user_id');
     }
-
-public function addresses()
-{
-    return $this->hasMany(UserAddress::class, 'user_id')
-        ->where('status', '!=', 'deleted');
-}
-
 }
