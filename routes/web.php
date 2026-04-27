@@ -14,10 +14,14 @@ use App\Http\Controllers\Admin\SidebarMenuController;
 use App\Http\Controllers\Admin\MenuAccessController;
 use App\Http\Controllers\Admin\AnimalTreatmentGuideController;
 use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Web\PageController;
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
 });
+
+Route::get('/terms-and-conditions', [PageController::class, 'termsAndConditions'])
+    ->name('terms.conditions');
 
 Route::prefix('admin')->name('admin.')->middleware(['admin.auth'])->group(function () {
 
