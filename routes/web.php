@@ -16,6 +16,8 @@ use App\Http\Controllers\Admin\AnimalTreatmentGuideController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Web\PageController;
 use App\Http\Controllers\Web\HomeController;
+use App\Http\Controllers\Admin\ReportTypeController;
+use App\Http\Controllers\Admin\CowConditionController;
 
 Route::get('/', [HomeController::class, 'index'])->name('website.home');
 
@@ -201,4 +203,19 @@ Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
 
 Route::prefix('super-admin')->name('superadmin.')->middleware(['admin.auth', 'super.admin'])->group(function () {
     Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
+});
+
+Route::prefix('admin')->name('admin.')->middleware(['web', 'admin.auth'])->group(function () {
+
+    Route::get('/report-types', [ReportTypeController::class, 'index'])->name('report-types.index');
+    Route::get('/report-types/create', [ReportTypeController::class, 'create'])->name('report-types.create');
+    Route::post('/report-types/store', [ReportTypeController::class, 'store'])->name('report-types.store');
+    Route::put('/report-types/update/{id}', [ReportTypeController::class, 'update'])->name('report-types.update');
+    Route::delete('/report-types/delete/{id}', [ReportTypeController::class, 'destroy'])->name('report-types.destroy');
+
+    Route::get('/cow-conditions', [CowConditionController::class, 'index'])->name('cow-conditions.index');
+    Route::get('/cow-conditions/create', [CowConditionController::class, 'create'])->name('cow-conditions.create');
+    Route::post('/cow-conditions/store', [CowConditionController::class, 'store'])->name('cow-conditions.store');
+    Route::put('/cow-conditions/update/{id}', [CowConditionController::class, 'update'])->name('cow-conditions.update');
+    Route::delete('/cow-conditions/delete/{id}', [CowConditionController::class, 'destroy'])->name('cow-conditions.destroy');
 });

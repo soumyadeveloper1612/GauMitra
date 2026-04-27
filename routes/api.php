@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\UserAddressController;
 use App\Http\Controllers\Api\EmergencyCaseController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\MasterDataController;
 
 Route::post('/send-otp', [AuthController::class, 'sendOtp']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
@@ -12,6 +13,11 @@ Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
+
+
+    Route::get('/report-types', [MasterDataController::class, 'reportTypes']);
+    Route::get('/cow-conditions', [MasterDataController::class, 'cowConditions']);
+    Route::get('/report-options', [MasterDataController::class, 'reportOptions']);
 
     /*
     |--------------------------------------------------------------------------
