@@ -107,10 +107,6 @@ class EmergencyCase extends Model
         return $this->belongsTo(User::class, 'reporter_id');
     }
 
-    public function currentHandler()
-    {
-        return $this->belongsTo(User::class, 'current_handler_id');
-    }
 
     public function media()
     {
@@ -138,6 +134,18 @@ class EmergencyCase extends Model
     {
         return $this->hasMany(EmergencyCaseAssignment::class, 'emergency_case_id');
     }
+
+       public function myAssignment()
+    {
+        return $this->hasOne(EmergencyCaseAssignment::class, 'emergency_case_id')
+            ->where('user_id', auth('sanctum')->id());
+    }
+
+    public function currentHandler()
+    {
+        return $this->belongsTo(User::class, 'current_handler_id');
+    }
+
 
     public function alerts()
     {

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\EmergencyCaseController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\MasterDataController;
 
+
     Route::post('/send-otp', [AuthController::class, 'sendOtp']);
     Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 
@@ -51,7 +52,9 @@ use App\Http\Controllers\Api\MasterDataController;
     Route::get('/emergency-cases/{id}', [EmergencyCaseController::class, 'show']);
 
 
-    Route::post('/emergency-cases/{id}/accept', [EmergencyCaseController::class, 'accept']);
+
+    Route::post('/emergency-cases/{id}/accept', [EmergencyCaseController::class, 'acceptReport']);
+    Route::post('/emergency-cases/{id}/reject', [EmergencyCaseController::class, 'rejectReport']);
     Route::post('/emergency-cases/{id}/status', [EmergencyCaseController::class, 'updateStatus']);
     Route::post('/emergency-cases/{id}/request-backup', [EmergencyCaseController::class, 'requestBackup']);
     Route::post('/emergency-cases/{id}/resolve', [EmergencyCaseController::class, 'resolve']);

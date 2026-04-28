@@ -5,6 +5,7 @@
 @section('header_subtitle', 'Add and manage sidebar menu items')
 
 @section('content')
+
 @include('admin.dashboard.sidebar-menu-theme')
 
 <div class="gm-page-hero">

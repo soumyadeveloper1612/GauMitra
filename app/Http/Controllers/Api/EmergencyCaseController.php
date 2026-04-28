@@ -8,6 +8,7 @@ use App\Models\AnimalType;
 use App\Models\EmergencyCase;
 use App\Models\EmergencyCaseLog;
 use App\Models\EmergencyCaseMedia;
+use App\Models\EmergencyCaseAssignment;
 use App\Models\ReportType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -324,48 +325,249 @@ class EmergencyCaseController extends Controller
             'data'    => $case,
         ]);
     }
-
+    
     public function acceptReport(Request $request, $id)
     {
-        $case = EmergencyCase::findOrFail($id);
+        $validator = Validator::make($request->all(), [
+            'notes'     => 'nullable|string|max:1000',
+            'remarks'   => 'nullable|string|max:1000',
+            'latitude'  => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+        ]);
 
-        if (!in_array($case->status, ['reported', 'alerted', 'escalated'])) {
+        if ($validator->fails()) {
             return response()->json([
                 'status'  => false,
-                'message' => 'This case cannot be accepted now.',
+                'message' => 'Validation failed.',
+                'errors'  => $validator->errors(),
             ], 422);
         }
 
-        $oldStatus = $case->status;
+        $userId = auth('sanctum')->id();
 
-        $case->update([
-            'current_handler_id' => auth('sanctum')->id(),
-            'status'             => 'accepted',
-            'accepted_at'        => now(),
+        try {
+            $case = DB::transaction(function () use ($request, $id, $userId) {
+                $case = EmergencyCase::where('id', $id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($case->status === 'accepted' && (int) $case->current_handler_id === (int) $userId) {
+                    return $case;
+                }
+
+                if ($case->status === 'accepted' && (int) $case->current_handler_id !== (int) $userId) {
+                    abort(response()->json([
+                        'status'  => false,
+                        'message' => 'This case has already been accepted by another responder.',
+                    ], 409));
+                }
+
+                if (!in_array($case->status, ['reported', 'alerted', 'escalated'])) {
+                    abort(response()->json([
+                        'status'  => false,
+                        'message' => 'This case cannot be accepted now.',
+                    ], 422));
+                }
+
+                $oldStatus = $case->status;
+                $notes = $request->notes ?? $request->remarks ?? 'Case accepted.';
+
+                $assignment = EmergencyCaseAssignment::updateOrCreate(
+                    [
+                        'emergency_case_id' => $case->id,
+                        'user_id'           => $userId,
+                    ],
+                    [
+                        'assignment_role' => 'responder',
+                        'status'          => 'accepted',
+                        'accepted_at'     => now(),
+                        'rejected_at'     => null,
+                        'cancelled_at'    => null,
+                        'notes'           => $notes,
+                    ]
+                );
+
+                $case->update([
+                    'current_handler_id' => $userId,
+                    'status'             => 'accepted',
+                    'accepted_at'        => now(),
+                ]);
+
+                EmergencyCaseAssignment::where('emergency_case_id', $case->id)
+                    ->where('user_id', '!=', $userId)
+                    ->whereIn('status', ['pending', 'assigned', 'alerted'])
+                    ->update([
+                        'status'       => 'cancelled',
+                        'cancelled_at' => now(),
+                    ]);
+
+                EmergencyCaseLog::create([
+                    'emergency_case_id' => $case->id,
+                    'user_id'           => $userId,
+                    'action'            => 'case_accepted',
+                    'old_status'        => $oldStatus,
+                    'new_status'        => 'accepted',
+                    'notes'             => $notes,
+                    'latitude'          => $request->latitude,
+                    'longitude'         => $request->longitude,
+                    'meta'              => [
+                        'assignment_id' => $assignment->id,
+                    ],
+                ]);
+
+                return $case;
+            });
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Case accepted successfully.',
+                'data'    => $case->fresh([
+                    'animalType',
+                    'reportType',
+                    'animalCondition',
+                    'media',
+                    'assignments.user:id,name,mobile',
+                    'currentHandler:id,name,mobile',
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
+                throw $e;
+            }
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while accepting the case.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    public function rejectReport(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'notes'     => 'nullable|string|max:1000',
+            'remarks'   => 'nullable|string|max:1000',
+            'latitude'  => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
         ]);
 
-        EmergencyCaseLog::create([
-            'emergency_case_id' => $case->id,
-            'user_id'           => auth('sanctum')->id(),
-            'action'            => 'case_accepted',
-            'old_status'        => $oldStatus,
-            'new_status'        => 'accepted',
-            'notes'             => $request->notes ?? $request->remarks ?? 'Case accepted.',
-            'latitude'          => $request->latitude,
-            'longitude'         => $request->longitude,
-            'meta'              => null,
-        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed.',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Case accepted successfully.',
-            'data'    => $case->fresh([
-                'animalType',
-                'reportType',
-                'animalCondition',
-                'media',
-            ]),
-        ]);
+        $userId = auth('sanctum')->id();
+
+        try {
+            $case = DB::transaction(function () use ($request, $id, $userId) {
+                $case = EmergencyCase::where('id', $id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if (in_array($case->status, ['resolved', 'closed', 'deleted'])) {
+                    abort(response()->json([
+                        'status'  => false,
+                        'message' => 'This case cannot be rejected now.',
+                    ], 422));
+                }
+
+                $oldStatus = $case->status;
+                $newStatus = $case->status;
+                $notes = $request->notes ?? $request->remarks ?? 'Case rejected.';
+
+                $assignment = EmergencyCaseAssignment::updateOrCreate(
+                    [
+                        'emergency_case_id' => $case->id,
+                        'user_id'           => $userId,
+                    ],
+                    [
+                        'assignment_role' => 'responder',
+                        'status'          => 'rejected',
+                        'rejected_at'     => now(),
+                        'accepted_at'     => null,
+                        'notes'           => $notes,
+                    ]
+                );
+
+                /*
+                * If the current accepted handler rejects the case,
+                * release the case again so another responder can accept it.
+                */
+                if ($case->status === 'accepted' && (int) $case->current_handler_id === (int) $userId) {
+                    $case->update([
+                        'current_handler_id' => null,
+                        'status'             => 'alerted',
+                        'accepted_at'        => null,
+                    ]);
+
+                    $newStatus = 'alerted';
+                }
+
+                /*
+                * Optional escalation:
+                * If all assigned responders rejected and nobody accepted,
+                * mark the case as escalated.
+                */
+                $acceptedCount = EmergencyCaseAssignment::where('emergency_case_id', $case->id)
+                    ->where('status', 'accepted')
+                    ->count();
+
+                $pendingCount = EmergencyCaseAssignment::where('emergency_case_id', $case->id)
+                    ->whereIn('status', ['pending', 'assigned', 'alerted'])
+                    ->count();
+
+                if ($acceptedCount === 0 && $pendingCount === 0 && in_array($case->status, ['reported', 'alerted'])) {
+                    $case->update([
+                        'status' => 'escalated',
+                    ]);
+
+                    $newStatus = 'escalated';
+                }
+
+                EmergencyCaseLog::create([
+                    'emergency_case_id' => $case->id,
+                    'user_id'           => $userId,
+                    'action'            => 'case_rejected',
+                    'old_status'        => $oldStatus,
+                    'new_status'        => $newStatus,
+                    'notes'             => $notes,
+                    'latitude'          => $request->latitude,
+                    'longitude'         => $request->longitude,
+                    'meta'              => [
+                        'assignment_id' => $assignment->id,
+                    ],
+                ]);
+
+                return $case;
+            });
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Case rejected successfully.',
+                'data'    => $case->fresh([
+                    'animalType',
+                    'reportType',
+                    'animalCondition',
+                    'media',
+                    'assignments.user:id,name,mobile',
+                    'currentHandler:id,name,mobile',
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
+                throw $e;
+            }
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while rejecting the case.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     public function changeStatus(Request $request, $id)
