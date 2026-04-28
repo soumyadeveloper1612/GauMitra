@@ -18,6 +18,7 @@ use App\Http\Controllers\Web\PageController;
 use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Admin\ReportTypeController;
 use App\Http\Controllers\Admin\CowConditionController;
+use App\Http\Controllers\Admin\AnimalTypeController;
 
 Route::get('/', [HomeController::class, 'index'])->name('website.home');
 
@@ -128,6 +129,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('destroy');
         });
 
+                
+        Route::get('/animal-types', [AnimalTypeController::class, 'index'])->name('animal-types.index');
+        Route::get('/animal-types/create', [AnimalTypeController::class, 'create'])->name('animal-types.create');
+        Route::post('/animal-types/store', [AnimalTypeController::class, 'store'])->name('animal-types.store');
+        Route::put('/animal-types/update/{id}', [AnimalTypeController::class, 'update'])->name('animal-types.update');
+        Route::delete('/animal-types/delete/{id}', [AnimalTypeController::class, 'destroy'])->name('animal-types.destroy');
+
         /*
         |--------------------------------------------------------------------------
         | Admin Management
@@ -206,7 +214,6 @@ Route::prefix('super-admin')->name('superadmin.')->middleware(['admin.auth', 'su
 });
 
 Route::prefix('admin')->name('admin.')->middleware(['web', 'admin.auth'])->group(function () {
-
     Route::get('/report-types', [ReportTypeController::class, 'index'])->name('report-types.index');
     Route::get('/report-types/create', [ReportTypeController::class, 'create'])->name('admin.report-types.create');
     Route::post('/report-types/store', [ReportTypeController::class, 'store'])->name('admin.report-types.store');
