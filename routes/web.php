@@ -1,9 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\SuperAdmin\SuperAdminDashboardController;
+
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
@@ -14,29 +16,56 @@ use App\Http\Controllers\Admin\SidebarMenuController;
 use App\Http\Controllers\Admin\MenuAccessController;
 use App\Http\Controllers\Admin\AnimalTreatmentGuideController;
 use App\Http\Controllers\Admin\NotificationController;
-use App\Http\Controllers\Web\PageController;
-use App\Http\Controllers\Web\HomeController;
+
 use App\Http\Controllers\Admin\ReportTypeController;
 use App\Http\Controllers\Admin\CowConditionController;
 use App\Http\Controllers\Admin\AnimalTypeController;
 
+use App\Http\Controllers\Web\PageController;
+use App\Http\Controllers\Web\HomeController;
+
+/*
+|--------------------------------------------------------------------------
+| Website Routes
+|--------------------------------------------------------------------------
+*/
+
 Route::get('/', [HomeController::class, 'index'])->name('website.home');
 
+Route::get('/terms-and-conditions', [PageController::class, 'termsAndConditions'])
+    ->name('terms.conditions');
+
+
+/*
+|--------------------------------------------------------------------------
+| Admin Routes
+|--------------------------------------------------------------------------
+*/
 
 Route::prefix('admin')->name('admin.')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Auth
+    |--------------------------------------------------------------------------
+    */
+
     Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.submit');
 
     Route::middleware(['admin.auth'])->group(function () {
+
         Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
 
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
 
         /*
         |--------------------------------------------------------------------------
         | App Users
         |--------------------------------------------------------------------------
         */
+
         Route::prefix('users')->name('users.')->group(function () {
             Route::get('/', [UserController::class, 'index'])
                 ->middleware('admin.permission:users.view')
@@ -55,11 +84,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('show');
         });
 
+
         /*
         |--------------------------------------------------------------------------
         | Gaushala
         |--------------------------------------------------------------------------
         */
+
         Route::prefix('gaushalas')->name('gaushalas.')->group(function () {
             Route::get('/', [GaushalaController::class, 'index'])
                 ->middleware('admin.permission:gaushala.view')
@@ -78,12 +109,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('show');
         });
 
-      
+
         /*
         |--------------------------------------------------------------------------
         | Report Cases
         |--------------------------------------------------------------------------
         */
+
         Route::prefix('report-cases')->name('report-cases.')->group(function () {
             Route::get('/', [AdminReportCaseController::class, 'index'])
                 ->middleware('admin.permission:report_cases.view')
@@ -102,11 +134,91 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('assign-handler');
         });
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | Report Types Master
+        |--------------------------------------------------------------------------
+        | Final route names:
+        | admin.report-types.index
+        | admin.report-types.create
+        | admin.report-types.store
+        | admin.report-types.update
+        | admin.report-types.destroy
+        */
+
+        Route::prefix('report-types')->name('report-types.')->group(function () {
+            Route::get('/', [ReportTypeController::class, 'index'])->name('index');
+            Route::get('/create', [ReportTypeController::class, 'create'])->name('create');
+            Route::post('/store', [ReportTypeController::class, 'store'])->name('store');
+            Route::put('/update/{id}', [ReportTypeController::class, 'update'])->name('update');
+            Route::delete('/delete/{id}', [ReportTypeController::class, 'destroy'])->name('destroy');
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cow Conditions Master
+        |--------------------------------------------------------------------------
+        | Final route names:
+        | admin.cow-conditions.index
+        | admin.cow-conditions.create
+        | admin.cow-conditions.store
+        | admin.cow-conditions.update
+        | admin.cow-conditions.destroy
+        */
+
+        Route::prefix('cow-conditions')->name('cow-conditions.')->group(function () {
+            Route::get('/', [CowConditionController::class, 'index'])->name('index');
+            Route::get('/create', [CowConditionController::class, 'create'])->name('create');
+            Route::post('/store', [CowConditionController::class, 'store'])->name('store');
+            Route::put('/update/{id}', [CowConditionController::class, 'update'])->name('update');
+            Route::delete('/delete/{id}', [CowConditionController::class, 'destroy'])->name('destroy');
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Animal Types Master
+        |--------------------------------------------------------------------------
+        | Final route names:
+        | admin.animal-types.index
+        | admin.animal-types.create
+        | admin.animal-types.store
+        | admin.animal-types.update
+        | admin.animal-types.destroy
+        */
+
+        Route::prefix('animal-types')->name('animal-types.')->group(function () {
+            Route::get('/', [AnimalTypeController::class, 'index'])->name('index');
+            Route::get('/create', [AnimalTypeController::class, 'create'])->name('create');
+            Route::post('/store', [AnimalTypeController::class, 'store'])->name('store');
+            Route::put('/update/{id}', [AnimalTypeController::class, 'update'])->name('update');
+            Route::delete('/delete/{id}', [AnimalTypeController::class, 'destroy'])->name('destroy');
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Animal Treatment Guides
+        |--------------------------------------------------------------------------
+        */
+
+        Route::prefix('animal-treatment-guides')->name('animal-treatment-guides.')->group(function () {
+            Route::get('/', [AnimalTreatmentGuideController::class, 'index'])->name('index');
+            Route::get('/create', [AnimalTreatmentGuideController::class, 'create'])->name('create');
+            Route::post('/store', [AnimalTreatmentGuideController::class, 'store'])->name('store');
+            Route::put('/update/{id}', [AnimalTreatmentGuideController::class, 'update'])->name('update');
+            Route::delete('/delete/{id}', [AnimalTreatmentGuideController::class, 'destroy'])->name('destroy');
+        });
+
+
         /*
         |--------------------------------------------------------------------------
         | News & Notices
         |--------------------------------------------------------------------------
         */
+
         Route::prefix('news-notices')->name('news-notices.')->group(function () {
             Route::get('/', [NewsNoticeController::class, 'index'])
                 ->middleware('admin.permission:news_notice.view')
@@ -129,18 +241,29 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 ->name('destroy');
         });
 
-                
-        Route::get('/animal-types', [AnimalTypeController::class, 'index'])->name('animal-types.index');
-        Route::get('/animal-types/create', [AnimalTypeController::class, 'create'])->name('animal-types.create');
-        Route::post('/animal-types/store', [AnimalTypeController::class, 'store'])->name('animal-types.store');
-        Route::put('/animal-types/update/{id}', [AnimalTypeController::class, 'update'])->name('animal-types.update');
-        Route::delete('/animal-types/delete/{id}', [AnimalTypeController::class, 'destroy'])->name('animal-types.destroy');
 
         /*
         |--------------------------------------------------------------------------
-        | Admin Management
+        | Notifications
         |--------------------------------------------------------------------------
         */
+
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+            Route::get('/', [NotificationController::class, 'index'])->name('index');
+            Route::post('/preview', [NotificationController::class, 'preview'])->name('preview');
+            Route::post('/send', [NotificationController::class, 'send'])->name('send');
+
+            Route::get('/address-options', [NotificationController::class, 'addressOptions'])->name('address-options');
+            Route::get('/search-users', [NotificationController::class, 'searchUsers'])->name('search-users');
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Management - Super Admin Only
+        |--------------------------------------------------------------------------
+        */
+
         Route::prefix('admins')->name('admins.')->middleware('super.admin')->group(function () {
             Route::get('/', [AdminUserController::class, 'index'])->name('index');
             Route::get('/create', [AdminUserController::class, 'create'])->name('create');
@@ -149,6 +272,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::put('/{admin}', [AdminUserController::class, 'update'])->name('update');
             Route::delete('/{admin}', [AdminUserController::class, 'destroy'])->name('destroy');
         });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Roles - Super Admin Only
+        |--------------------------------------------------------------------------
+        */
 
         Route::prefix('roles')->name('roles.')->middleware('super.admin')->group(function () {
             Route::get('/', [RoleController::class, 'index'])->name('index');
@@ -159,11 +289,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{role}', [RoleController::class, 'destroy'])->name('destroy');
         });
 
+
         /*
         |--------------------------------------------------------------------------
-        | Sidebar Menus
+        | Sidebar Menus - Super Admin Only
         |--------------------------------------------------------------------------
         */
+
         Route::prefix('sidebar-menus')->name('sidebar-menus.')->middleware('super.admin')->group(function () {
             Route::get('/', [SidebarMenuController::class, 'index'])->name('index');
             Route::get('/create', [SidebarMenuController::class, 'create'])->name('create');
@@ -173,56 +305,31 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{sidebar_menu}', [SidebarMenuController::class, 'destroy'])->name('destroy');
         });
 
-        Route::prefix('notifications')->name('notifications.')->group(function () {
-            Route::get('/', [NotificationController::class, 'index'])->name('index');
-            Route::post('/preview', [NotificationController::class, 'preview'])->name('preview');
-            Route::post('/send', [NotificationController::class, 'send'])->name('send');
 
-            // New AJAX routes
-            Route::get('/address-options', [NotificationController::class, 'addressOptions'])->name('address-options');
-            Route::get('/search-users', [NotificationController::class, 'searchUsers'])->name('search-users');
+        /*
+        |--------------------------------------------------------------------------
+        | Menu Access - Super Admin Only
+        |--------------------------------------------------------------------------
+        */
+
+        Route::prefix('menu-access')->name('menu-access.')->middleware('super.admin')->group(function () {
+            Route::get('/', [MenuAccessController::class, 'index'])->name('index');
+            Route::get('/{admin}/edit', [MenuAccessController::class, 'edit'])->name('edit');
+            Route::put('/{admin}', [MenuAccessController::class, 'update'])->name('update');
         });
     });
 });
 
-Route::prefix('admin')->name('admin.')->middleware(['admin.auth'])->group(function () {
 
-    Route::prefix('menu-access')->name('menu-access.')->middleware('super.admin')->group(function () {
-        Route::get('/', [MenuAccessController::class, 'index'])->name('index');
-        Route::get('/{admin}/edit', [MenuAccessController::class, 'edit'])->name('edit');
-        Route::put('/{admin}', [MenuAccessController::class, 'update'])->name('update');
+/*
+|--------------------------------------------------------------------------
+| Super Admin Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('super-admin')
+    ->name('superadmin.')
+    ->middleware(['admin.auth', 'super.admin'])
+    ->group(function () {
+        Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
     });
-
-});
-
-
-Route::get('/terms-and-conditions', [PageController::class, 'termsAndConditions'])
-    ->name('terms.conditions');
-
-
-
-Route::prefix('admin')->name('admin.')->middleware(['web'])->group(function () {
-    Route::get('/animal-treatment-guides', [AnimalTreatmentGuideController::class, 'index'])->name('animal-treatment-guides.index');
-    Route::get('/animal-treatment-guides/create', [AnimalTreatmentGuideController::class, 'create'])->name('animal-treatment-guides.create');
-    Route::post('/animal-treatment-guides/store', [AnimalTreatmentGuideController::class, 'store'])->name('animal-treatment-guides.store');
-    Route::put('/animal-treatment-guides/update/{id}', [AnimalTreatmentGuideController::class, 'update'])->name('animal-treatment-guides.update');
-    Route::delete('/animal-treatment-guides/delete/{id}', [AnimalTreatmentGuideController::class, 'destroy'])->name('animal-treatment-guides.destroy');
-});
-
-Route::prefix('super-admin')->name('superadmin.')->middleware(['admin.auth', 'super.admin'])->group(function () {
-    Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
-});
-
-Route::prefix('admin')->name('admin.')->middleware(['web', 'admin.auth'])->group(function () {
-    Route::get('/report-types', [ReportTypeController::class, 'index'])->name('report-types.index');
-    Route::get('/report-types/create', [ReportTypeController::class, 'create'])->name('admin.report-types.create');
-    Route::post('/report-types/store', [ReportTypeController::class, 'store'])->name('admin.report-types.store');
-    Route::put('/report-types/update/{id}', [ReportTypeController::class, 'update'])->name('admin.report-types.update');
-    Route::delete('/report-types/delete/{id}', [ReportTypeController::class, 'destroy'])->name('admin.report-types.destroy');
-
-    Route::get('/cow-conditions', [CowConditionController::class, 'index'])->name('cow-conditions.index');
-    Route::get('/cow-conditions/create', [CowConditionController::class, 'create'])->name('cow-conditions.create');
-    Route::post('/cow-conditions/store', [CowConditionController::class, 'store'])->name('cow-conditions.store');
-    Route::put('/cow-conditions/update/{id}', [CowConditionController::class, 'update'])->name('cow-conditions.update');
-    Route::delete('/cow-conditions/delete/{id}', [CowConditionController::class, 'destroy'])->name('cow-conditions.destroy');
-});
