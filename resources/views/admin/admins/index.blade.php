@@ -5,8 +5,7 @@
 @section('header_subtitle', 'Create, update, and control admin access')
 
 @section('content')
-@include('admin.admins.partials.admin-theme')
-
+@include('admin.layouts.components.admin-theme')
 @php
     $adminCollection = method_exists($admins, 'getCollection') ? $admins->getCollection() : collect($admins);
 

@@ -5,7 +5,7 @@
 @section('header_subtitle', 'Update admin details and roles')
 
 @section('content')
-@include('admin.admins.partials.admin-theme')
+@include('admin.layouts.components.admin-theme')
 
 <div class="gm-page-hero">
     <div class="gm-hero-kicker">
