@@ -6,136 +6,252 @@
 
 @section('content')
 <style>
+    :root {
+        --gm-saffron: #f57c00;
+        --gm-deep-saffron: #d35400;
+        --gm-brown: #5d2f12;
+        --gm-dark-brown: #3b1d0c;
+        --gm-cream: #fff8ec;
+        --gm-light: #fff3db;
+        --gm-soft: #fff7ea;
+        --gm-green: #2e7d32;
+        --gm-red: #c0392b;
+        --gm-blue: #1d4ed8;
+        --gm-border: rgba(93, 47, 18, 0.14);
+        --gm-shadow: 0 18px 45px rgba(93, 47, 18, 0.12);
+    }
+
+    body {
+        background:
+            radial-gradient(circle at top left, rgba(245, 124, 0, 0.13), transparent 32%),
+            linear-gradient(135deg, #fffaf0 0%, #fff3db 45%, #fff8ec 100%);
+    }
+
     .notify-hero {
-        background: linear-gradient(135deg, #0f766e, #16a34a);
-        border-radius: 22px;
-        padding: 24px;
+        position: relative;
+        overflow: hidden;
+        background:
+            linear-gradient(135deg, rgba(93, 47, 18, 0.97), rgba(211, 84, 0, 0.95)),
+            url("data:image/svg+xml,%3Csvg width='160' height='160' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.12' stroke-width='2'%3E%3Cpath d='M80 10 L95 60 L148 60 L105 91 L122 142 L80 110 L38 142 L55 91 L12 60 L65 60 Z'/%3E%3Ccircle cx='80' cy='80' r='54'/%3E%3C/g%3E%3C/svg%3E");
+        border-radius: 28px;
+        padding: 28px;
         color: #fff;
-        box-shadow: 0 16px 40px rgba(15, 118, 110, .22);
-        margin-bottom: 22px;
+        box-shadow: var(--gm-shadow);
+        margin-bottom: 24px;
+    }
+
+    .notify-hero::after {
+        content: "";
+        position: absolute;
+        width: 230px;
+        height: 230px;
+        right: -75px;
+        top: -75px;
+        border-radius: 50%;
+        background: rgba(255, 193, 7, 0.18);
+    }
+
+    .notify-hero h3 {
+        font-weight: 900;
+        letter-spacing: -0.4px;
+    }
+
+    .notify-hero p {
+        color: rgba(255, 255, 255, 0.84);
+        font-weight: 500;
     }
 
     .notify-card {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 20px;
-        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--gm-border);
+        border-radius: 26px;
+        box-shadow: var(--gm-shadow);
         overflow: hidden;
+        backdrop-filter: blur(10px);
     }
 
     .notify-card-header {
-        padding: 18px 22px;
-        border-bottom: 1px solid #eef2f7;
-        background: #f8fafc;
+        padding: 20px 24px;
+        border-bottom: 1px solid rgba(93, 47, 18, 0.1);
+        background: linear-gradient(135deg, #fff8ec, #fff0d3);
+    }
+
+    .notify-card-header h5 {
+        color: var(--gm-brown);
+        font-weight: 900;
     }
 
     .notify-card-body {
-        padding: 22px;
+        padding: 24px;
     }
 
     .stat-box {
-        background: rgba(255,255,255,.16);
-        border: 1px solid rgba(255,255,255,.24);
-        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.17);
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        border-radius: 20px;
         padding: 16px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-box::after {
+        content: "";
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        right: -20px;
+        bottom: -20px;
+        background: rgba(255, 255, 255, 0.14);
+        border-radius: 50%;
     }
 
     .stat-box h3 {
         margin: 0;
-        font-weight: 800;
-        font-size: 26px;
+        font-weight: 900;
+        font-size: 28px;
     }
 
     .stat-box span {
         font-size: 13px;
         opacity: .92;
+        font-weight: 700;
     }
 
     .section-title {
-        font-weight: 800;
-        color: #0f172a;
-        margin-bottom: 12px;
+        font-weight: 900;
+        color: var(--gm-brown);
+        margin-bottom: 8px;
     }
 
     .form-label {
-        font-weight: 700;
-        color: #334155;
+        font-weight: 800;
+        color: var(--gm-brown);
         font-size: 13px;
+        margin-bottom: 8px;
     }
 
     .form-control,
     .form-select {
-        border-radius: 12px;
-        border-color: #dbe3ef;
-        min-height: 44px;
+        border-radius: 16px;
+        border: 1px solid rgba(93, 47, 18, 0.18);
+        min-height: 48px;
+        background: #fffdfa;
+        color: var(--gm-dark-brown);
+        font-weight: 600;
+    }
+
+    textarea.form-control {
+        min-height: auto;
     }
 
     .form-control:focus,
     .form-select:focus {
-        border-color: #16a34a;
-        box-shadow: 0 0 0 .18rem rgba(22, 163, 74, .12);
+        border-color: var(--gm-saffron);
+        box-shadow: 0 0 0 .22rem rgba(245, 124, 0, .16);
     }
 
     .target-panel {
-        border: 1px dashed #cbd5e1;
-        border-radius: 18px;
-        padding: 18px;
-        background: #f8fafc;
+        border: 1px dashed rgba(93, 47, 18, 0.26);
+        border-radius: 22px;
+        padding: 20px;
+        background: linear-gradient(180deg, #fffdfa, #fff7ea);
     }
 
     .preview-box {
-        border-radius: 18px;
-        padding: 18px;
-        background: linear-gradient(135deg, #ecfdf5, #f0fdfa);
-        border: 1px solid #bbf7d0;
+        border-radius: 22px;
+        padding: 20px;
+        background: linear-gradient(135deg, #fff3db, #fff8ec);
+        border: 1px solid rgba(245, 124, 0, 0.22);
     }
 
     .preview-number {
-        font-size: 28px;
+        font-size: 30px;
         font-weight: 900;
-        color: #15803d;
+        color: var(--gm-deep-saffron);
         line-height: 1;
+    }
+
+    .history-table {
+        border-collapse: separate;
+        border-spacing: 0 10px;
+        padding: 0 16px 16px;
     }
 
     .history-table th {
         font-size: 12px;
         text-transform: uppercase;
-        color: #64748b;
-        background: #f8fafc;
+        color: var(--gm-brown);
+        background: transparent;
+        border: 0;
+        font-weight: 900;
+        letter-spacing: 0.4px;
+        padding: 14px 12px 8px;
+        white-space: nowrap;
+    }
+
+    .history-table tbody tr {
+        background: #fffdfa;
+        box-shadow: 0 10px 24px rgba(93, 47, 18, 0.08);
+    }
+
+    .history-table tbody td {
+        border-top: 1px solid rgba(93, 47, 18, 0.08);
+        border-bottom: 1px solid rgba(93, 47, 18, 0.08);
+        padding: 15px 12px;
+        vertical-align: middle;
+    }
+
+    .history-table tbody td:first-child {
+        border-left: 1px solid rgba(93, 47, 18, 0.08);
+        border-radius: 18px 0 0 18px;
+    }
+
+    .history-table tbody td:last-child {
+        border-right: 1px solid rgba(93, 47, 18, 0.08);
+        border-radius: 0 18px 18px 0;
+    }
+
+    .badge {
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-weight: 800;
     }
 
     .badge-soft-success {
-        background: #dcfce7;
-        color: #166534;
+        background: rgba(46, 125, 50, 0.13);
+        color: var(--gm-green);
     }
 
     .badge-soft-danger {
-        background: #fee2e2;
-        color: #991b1b;
+        background: rgba(192, 57, 43, 0.13);
+        color: var(--gm-red);
     }
 
     .badge-soft-warning {
-        background: #fef3c7;
-        color: #92400e;
+        background: rgba(245, 124, 0, 0.16);
+        color: var(--gm-deep-saffron);
     }
 
     .badge-soft-info {
-        background: #dbeafe;
-        color: #1d4ed8;
+        background: #fff0d3;
+        color: var(--gm-brown);
+        border: 1px solid rgba(245, 124, 0, 0.18);
     }
 
     .btn-send {
-        border-radius: 14px;
-        padding: 12px 22px;
-        font-weight: 800;
-        background: linear-gradient(135deg, #16a34a, #0f766e);
+        border-radius: 999px;
+        padding: 12px 24px;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--gm-saffron), var(--gm-deep-saffron));
         border: 0;
         color: #fff;
+        box-shadow: 0 12px 24px rgba(211, 84, 0, 0.24);
     }
 
     .btn-send:hover {
         color: #fff;
-        opacity: .95;
+        transform: translateY(-1px);
+        box-shadow: 0 16px 30px rgba(211, 84, 0, 0.32);
     }
 
     .btn-send:disabled {
@@ -144,54 +260,68 @@
     }
 
     .btn-preview {
-        border-radius: 14px;
+        border-radius: 999px;
         padding: 12px 18px;
-        font-weight: 800;
+        font-weight: 900;
+        color: var(--gm-green);
+        border-color: rgba(46, 125, 50, 0.42);
+        background: #fffdfa;
+    }
+
+    .btn-preview:hover {
+        background: var(--gm-green);
+        color: #fff;
+        border-color: var(--gm-green);
     }
 
     .small-help {
         font-size: 12px;
-        color: #64748b;
+        color: rgba(93, 47, 18, 0.66);
+        font-weight: 600;
     }
 
     .user-result-card {
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 12px 14px;
-        background: #ffffff;
+        border: 1px solid rgba(93, 47, 18, 0.12);
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: #fffdfa;
         margin-bottom: 10px;
         display: flex;
         justify-content: space-between;
         gap: 12px;
         align-items: center;
+        box-shadow: 0 8px 18px rgba(93, 47, 18, 0.06);
     }
 
     .user-result-card:hover {
-        background: #f8fafc;
+        background: #fff7ea;
+        border-color: rgba(245, 124, 0, 0.32);
     }
 
     .user-name {
-        font-weight: 800;
-        color: #0f172a;
+        font-weight: 900;
+        color: var(--gm-brown);
     }
 
     .user-mobile {
         font-size: 13px;
-        color: #475569;
+        color: var(--gm-dark-brown);
+        font-weight: 700;
     }
 
     .user-address {
         font-size: 12px;
-        color: #64748b;
+        color: rgba(93, 47, 18, 0.62);
+        font-weight: 600;
     }
 
     .user-chip {
-        background: #ecfdf5;
-        border: 1px solid #bbf7d0;
-        color: #166534;
+        background: #fff0d3;
+        border: 1px solid rgba(245, 124, 0, 0.28);
+        color: var(--gm-brown);
         border-radius: 999px;
-        padding: 8px 12px;
-        font-weight: 700;
+        padding: 9px 13px;
+        font-weight: 800;
         display: inline-flex;
         align-items: center;
         gap: 8px;
@@ -200,55 +330,143 @@
     .user-chip button {
         border: 0;
         background: transparent;
-        color: #dc2626;
+        color: var(--gm-red);
         font-weight: 900;
         line-height: 1;
+        font-size: 18px;
     }
 
     .token-badge-ok {
-        background: #dcfce7;
-        color: #166534;
+        background: rgba(46, 125, 50, 0.13);
+        color: var(--gm-green);
         border-radius: 999px;
-        padding: 4px 8px;
+        padding: 5px 9px;
         font-size: 11px;
-        font-weight: 800;
+        font-weight: 900;
     }
 
     .token-badge-no {
-        background: #fee2e2;
-        color: #991b1b;
+        background: rgba(192, 57, 43, 0.13);
+        color: var(--gm-red);
         border-radius: 999px;
-        padding: 4px 8px;
+        padding: 5px 9px;
         font-size: 11px;
-        font-weight: 800;
+        font-weight: 900;
     }
 
     .image-preview-box img {
         width: 100%;
-        max-height: 170px;
+        max-height: 180px;
         object-fit: cover;
-        border-radius: 14px;
-        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        border: 1px solid rgba(93, 47, 18, 0.14);
+        box-shadow: 0 10px 22px rgba(93, 47, 18, 0.1);
+    }
+
+    .alert {
+        border-radius: 18px;
+        font-weight: 700;
+    }
+
+    .alert-success {
+        background: rgba(46, 125, 50, 0.12);
+        border-color: rgba(46, 125, 50, 0.22);
+        color: var(--gm-green);
+    }
+
+    .alert-danger {
+        background: rgba(192, 57, 43, 0.1);
+        border-color: rgba(192, 57, 43, 0.22);
+        color: var(--gm-red);
+    }
+
+    .alert-warning {
+        background: rgba(245, 124, 0, 0.12);
+        border-color: rgba(245, 124, 0, 0.22);
+        color: var(--gm-deep-saffron);
+    }
+
+    .alert-info {
+        background: #fff0d3;
+        border-color: rgba(245, 124, 0, 0.22);
+        color: var(--gm-brown);
+    }
+
+    .btn-success,
+    .btn-outline-success:hover {
+        background: var(--gm-saffron) !important;
+        border-color: var(--gm-saffron) !important;
+        color: #fff !important;
+    }
+
+    .btn-outline-secondary {
+        border-radius: 999px;
+        font-weight: 800;
+        color: var(--gm-brown);
+        border-color: rgba(93, 47, 18, 0.24);
+    }
+
+    .btn-outline-secondary:hover {
+        background: var(--gm-brown);
+        color: #fff;
+        border-color: var(--gm-brown);
+    }
+
+    .bg-light.text-dark {
+        background: #fff0d3 !important;
+        color: var(--gm-brown) !important;
+        border: 1px solid rgba(245, 124, 0, 0.2);
+    }
+
+    a.small {
+        color: var(--gm-deep-saffron);
+        font-weight: 800;
+        text-decoration: none;
+    }
+
+    a.small:hover {
+        color: var(--gm-brown);
+        text-decoration: underline;
+    }
+
+    @media (max-width: 767px) {
+        .notify-hero,
+        .notify-card {
+            border-radius: 22px;
+        }
+
+        .notify-hero {
+            padding: 22px;
+        }
+
+        .notify-card-body {
+            padding: 20px;
+        }
+
+        .history-table {
+            border-spacing: 0 8px;
+            padding: 0 10px 10px;
+        }
     }
 </style>
 
-<div class="container-fluid">
+<div class="container-fluid py-4">
 
     @if(session('success'))
         <div class="alert alert-success rounded-4">
-            {{ session('success') }}
+            <i class="bi bi-check-circle me-1"></i>{{ session('success') }}
         </div>
     @endif
 
     @if(session('error'))
         <div class="alert alert-danger rounded-4">
-            {{ session('error') }}
+            <i class="bi bi-exclamation-triangle me-1"></i>{{ session('error') }}
         </div>
     @endif
 
     @if($errors->any())
         <div class="alert alert-danger rounded-4">
-            <strong>Please fix these errors:</strong>
+            <strong><i class="bi bi-exclamation-triangle me-1"></i>Please fix these errors:</strong>
             <ul class="mb-0 mt-2">
                 @foreach($errors->all() as $error)
                     <li>{{ $error }}</li>
@@ -260,6 +478,12 @@
     <div class="notify-hero">
         <div class="row align-items-center g-3">
             <div class="col-lg-6">
+                <div class="d-inline-flex align-items-center gap-2 px-3 py-2 rounded-pill mb-3"
+                     style="background: rgba(255,255,255,0.16); font-weight: 800; font-size: 13px;">
+                    <i class="bi bi-bell-fill"></i>
+                    GauMitra Alert System
+                </div>
+
                 <h3 class="mb-1 fw-bold">Notification Center</h3>
                 <p class="mb-0 opacity-75">
                     Send alerts to all users, selected areas, or selected registered users.
@@ -310,7 +534,9 @@
             <div class="col-xl-8">
                 <div class="notify-card">
                     <div class="notify-card-header">
-                        <h5 class="mb-0 fw-bold">Create Notification</h5>
+                        <h5 class="mb-0 fw-bold">
+                            <i class="bi bi-pencil-square me-1"></i>Create Notification
+                        </h5>
                     </div>
 
                     <div class="notify-card-body">
@@ -424,7 +650,9 @@
 
                 <div class="notify-card mt-4">
                     <div class="notify-card-header">
-                        <h5 class="mb-0 fw-bold">Target Audience</h5>
+                        <h5 class="mb-0 fw-bold">
+                            <i class="bi bi-people-fill me-1"></i>Target Audience
+                        </h5>
                     </div>
 
                     <div class="notify-card-body">
@@ -441,7 +669,7 @@
 
                                 <div class="col-md-6 d-flex align-items-end">
                                     <button type="button" id="previewBtn" class="btn btn-outline-success btn-preview w-100">
-                                        Preview Target Users
+                                        <i class="bi bi-eye me-1"></i> Preview Target Users
                                     </button>
                                 </div>
                             </div>
@@ -538,7 +766,7 @@
 
                         <div class="d-flex justify-content-end mt-4">
                             <button type="submit" id="sendBtn" class="btn btn-send">
-                                Send Notification Now
+                                <i class="bi bi-send-fill me-1"></i> Send Notification Now
                             </button>
                         </div>
                     </div>
@@ -548,7 +776,9 @@
             <div class="col-xl-4">
                 <div class="notify-card">
                     <div class="notify-card-header">
-                        <h5 class="mb-0 fw-bold">Target Options</h5>
+                        <h5 class="mb-0 fw-bold">
+                            <i class="bi bi-bullseye me-1"></i>Target Options
+                        </h5>
                     </div>
                     <div class="notify-card-body">
                         <div class="mb-3">
@@ -583,7 +813,9 @@
 
                 <div class="notify-card mt-4">
                     <div class="notify-card-header">
-                        <h5 class="mb-0 fw-bold">Before Sending</h5>
+                        <h5 class="mb-0 fw-bold">
+                            <i class="bi bi-shield-check me-1"></i>Before Sending
+                        </h5>
                     </div>
                     <div class="notify-card-body">
                         <ul class="small-help mb-0">
@@ -601,7 +833,9 @@
 
     <div class="notify-card mt-4">
         <div class="notify-card-header">
-            <h5 class="mb-0 fw-bold">Notification History</h5>
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-clock-history me-1"></i>Notification History
+            </h5>
         </div>
 
         <div class="table-responsive">
@@ -630,7 +864,7 @@
                                 </span>
                             </td>
                             <td>
-                                <strong>{{ $campaign->title }}</strong>
+                                <strong style="color: var(--gm-brown);">{{ $campaign->title }}</strong>
                                 <div class="small-help">{{ Str::limit($campaign->message, 70) }}</div>
 
                                 @if($campaign->image_url)
@@ -675,6 +909,7 @@
                     @empty
                         <tr>
                             <td colspan="9" class="text-center py-5 text-muted">
+                                <i class="bi bi-bell-slash fs-2 d-block mb-2"></i>
                                 No notification history found.
                             </td>
                         </tr>
@@ -690,6 +925,8 @@
         @endif
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -928,7 +1165,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = 'btn btn-sm btn-success';
+            button.className = 'btn btn-sm btn-success rounded-pill fw-bold';
             button.textContent = selectedUsers[user.id] ? 'Selected' : 'Select';
             button.disabled = !user.can_receive || !!selectedUsers[user.id];
 
@@ -1003,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const payload = buildPayloadFromForm();
 
         previewBtn.disabled = true;
-        previewBtn.innerText = 'Checking...';
+        previewBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Checking...';
 
         fetch("{{ route('admin.notifications.preview') }}", {
             method: "POST",
@@ -1043,7 +1280,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 Swal.fire({
                     icon: 'error',
                     title: 'Preview Error',
-                    text: error.message
+                    text: error.message,
+                    confirmButtonColor: '#c0392b',
+                    background: '#fff8ec',
+                    color: '#5d2f12'
                 });
             } else {
                 alert(error.message);
@@ -1051,7 +1291,7 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .finally(() => {
             previewBtn.disabled = false;
-            previewBtn.innerText = 'Preview Target Users';
+            previewBtn.innerHTML = '<i class="bi bi-eye me-1"></i> Preview Target Users';
         });
     });
 
@@ -1067,7 +1307,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (sendBtn) {
                 sendBtn.disabled = true;
-                sendBtn.innerText = 'Sending...';
+                sendBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Sending...';
             }
 
             form.submit();
@@ -1081,7 +1321,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 showCancelButton: true,
                 confirmButtonText: 'Yes, send now',
                 cancelButtonText: 'Cancel',
-                confirmButtonColor: '#16a34a'
+                confirmButtonColor: '#d35400',
+                cancelButtonColor: '#5d2f12',
+                background: '#fff8ec',
+                color: '#5d2f12'
             }).then((result) => {
                 if (result.isConfirmed) {
                     submitNow();
