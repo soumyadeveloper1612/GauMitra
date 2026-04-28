@@ -5,15 +5,35 @@
 @section('header_subtitle', 'Update sidebar menu item')
 
 @section('content')
-<div class="page-card">
-    <div class="mb-4">
-        <h3 class="page-title">Edit Sidebar Menu</h3>
-        <p class="page-subtitle">Update parent or child sidebar menu.</p>
+@include('admin.dashboard.sidebar-menu-theme')
+
+<div class="gm-page-hero">
+    <div class="gm-hero-kicker">
+        <i class="bi bi-pencil-square"></i>
+        GauMitra Sidebar Update
+    </div>
+    <h3 class="gm-hero-title">Edit Sidebar Menu</h3>
+    <p class="gm-hero-subtitle">
+        Update parent or child sidebar menu details, route, permission, icon, order, and status.
+    </p>
+</div>
+
+<div class="gm-card">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+        <div>
+            <h3 class="gm-card-title">Edit Sidebar Menu</h3>
+            <p class="gm-card-subtitle">Update parent or child sidebar menu.</p>
+        </div>
+
+        <a href="{{ route('admin.sidebar-menus.index') }}" class="gm-btn-light text-decoration-none">
+            <i class="bi bi-arrow-left me-1"></i> Back
+        </a>
     </div>
 
     @if($errors->any())
-        <div class="alert alert-danger rounded-4">
-            <ul class="mb-0 ps-3">
+        <div class="alert gm-alert mb-4">
+            <strong><i class="bi bi-exclamation-triangle me-1"></i> Please fix these errors:</strong>
+            <ul class="mb-0 mt-2 ps-3">
                 @foreach($errors->all() as $error)
                     <li>{{ $error }}</li>
                 @endforeach
@@ -25,7 +45,9 @@
         @csrf
         @method('PUT')
 
-        @include('admin.dashboard._forms', ['sidebarMenu' => $sidebarMenu])
+        <div class="gm-section-box">
+            @include('admin.dashboard._forms', ['sidebarMenu' => $sidebarMenu])
+        </div>
     </form>
 </div>
 @endsection
