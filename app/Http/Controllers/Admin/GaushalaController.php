@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Gaushala;
 use Illuminate\Http\Request;
-use App\Models\GaushalaMember;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -117,11 +116,10 @@ class GaushalaController extends Controller
             ]);
 
             foreach ($validated['members'] as $member) {
-                GaushalaMember::create([
-                    'gaushala_id'   => $gaushala->id,
-                    'member_name'   => $member['name'],
-                    'member_phone'  => $member['phone'],
-                    'status'        => 'active',
+                $gaushala->members()->create([
+                    'member_name'  => $member['name'],
+                    'member_phone' => $member['phone'],
+                    'status'       => 'active',
                 ]);
             }
 
@@ -140,15 +138,23 @@ class GaushalaController extends Controller
                 'line'    => $e->getLine(),
             ]);
 
+            $message = 'Gaushala registration failed.';
+
+            if (config('app.debug')) {
+                $message .= ' Error: ' . $e->getMessage();
+            } else {
+                $message .= ' Please contact administrator.';
+            }
+
             return back()
                 ->withInput()
-                ->with('error', 'Server error. Gaushala registration failed. Please check required fields and try again.');
+                ->with('error', $message);
         }
     }
 
     public function show($id)
     {
-        $gaushala = Gaushala::findOrFail($id);
+        $gaushala = Gaushala::with('members')->findOrFail($id);
 
         return view('admin.gaushalas.show', compact('gaushala'));
     }
