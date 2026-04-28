@@ -3,115 +3,42 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AnimalCondition;
+use App\Models\AnimalType;
 use App\Models\EmergencyCase;
+use App\Models\EmergencyCaseAssignment;
+use App\Models\EmergencyCaseLog;
+use App\Models\EmergencyCaseMedia;
+use App\Models\ReportType;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class AdminReportCaseController extends Controller
 {
-    private array $statuses = [
-        'reported',
-        'alerted',
-        'accepted',
-        'en_route',
-        'reached_site',
-        'rescue_in_progress',
-        'needs_backup',
-        'treatment_started',
-        'shifted_to_gaushala',
-        'resolved',
-        'closed',
-        'duplicate_case',
-        'false_report',
-        'unable_to_locate',
-        'cancelled',
-        'escalated',
-    ];
-
     public function index(Request $request)
     {
-        abort_unless(Schema::hasTable('emergency_cases'), 404);
+        $filters = [
+            'keyword'             => $request->keyword,
+            'status'              => $request->status,
+            'severity'            => $request->severity,
+            'animal_type_id'      => $request->animal_type_id,
+            'report_type_id'      => $request->report_type_id,
+            'animal_condition_id' => $request->animal_condition_id,
+            'district'            => $request->district,
+            'date_from'           => $request->date_from,
+            'date_to'             => $request->date_to,
+            'card'                => $request->card,
+        ];
 
-        $statuses = $this->statuses;
-        $responders = $this->getResponderUsers();
-
-        $query = EmergencyCase::query()
-            ->leftJoin('users as reporter', 'emergency_cases.reporter_id', '=', 'reporter.id')
-            ->leftJoin('users as handler', 'emergency_cases.current_handler_id', '=', 'handler.id')
-            ->select(
-                'emergency_cases.*',
-                'reporter.name as reporter_name',
-                'reporter.mobile as reporter_mobile',
-                'handler.name as handler_name',
-                'handler.mobile as handler_mobile'
-            );
-
-        $card = $request->card;
-
-        if ($card === 'pending') {
-            $query->whereIn('emergency_cases.status', ['reported', 'alerted']);
-        } elseif ($card === 'active') {
-            $query->whereIn('emergency_cases.status', [
-                'accepted',
-                'en_route',
-                'reached_site',
-                'rescue_in_progress',
-                'needs_backup',
-                'treatment_started',
-                'shifted_to_gaushala',
-                'escalated',
-            ]);
-        } elseif ($card === 'critical') {
-            $query->where('emergency_cases.severity', 'critical');
-        } elseif ($card === 'resolved') {
-            $query->whereIn('emergency_cases.status', ['resolved', 'closed']);
-        }
-
-        if ($request->filled('keyword')) {
-            $keyword = trim($request->keyword);
-            $query->where(function ($q) use ($keyword) {
-                $q->where('emergency_cases.case_uid', 'like', "%{$keyword}%")
-                    ->orWhere('emergency_cases.title', 'like', "%{$keyword}%")
-                    ->orWhere('emergency_cases.contact_number', 'like', "%{$keyword}%")
-                    ->orWhere('emergency_cases.district', 'like', "%{$keyword}%")
-                    ->orWhere('reporter.name', 'like', "%{$keyword}%")
-                    ->orWhere('reporter.mobile', 'like', "%{$keyword}%");
-            });
-        }
-
-        if ($request->filled('status')) {
-            $query->where('emergency_cases.status', $request->status);
-        }
-
-        if ($request->filled('severity')) {
-            $query->where('emergency_cases.severity', $request->severity);
-        }
-
-        if ($request->filled('case_type')) {
-            $query->where('emergency_cases.case_type', $request->case_type);
-        }
-
-        if ($request->filled('district')) {
-            $query->where('emergency_cases.district', 'like', '%' . $request->district . '%');
-        }
-
-        if ($request->filled('date_from')) {
-            $query->whereDate('emergency_cases.created_at', '>=', $request->date_from);
-        }
-
-        if ($request->filled('date_to')) {
-            $query->whereDate('emergency_cases.created_at', '<=', $request->date_to);
-        }
-
-        $reports = $query->orderByDesc('emergency_cases.id')->get();
+        $baseQuery = EmergencyCase::query();
 
         $summary = [
-            'total' => EmergencyCase::count(),
-            'pending' => EmergencyCase::whereIn('status', ['reported', 'alerted'])->count(),
-            'active' => EmergencyCase::whereIn('status', [
+            'total'    => (clone $baseQuery)->count(),
+            'pending'  => (clone $baseQuery)->whereIn('status', ['reported', 'alerted'])->count(),
+            'active'   => (clone $baseQuery)->whereIn('status', [
                 'accepted',
                 'en_route',
                 'reached_site',
@@ -121,262 +48,304 @@ class AdminReportCaseController extends Controller
                 'shifted_to_gaushala',
                 'escalated',
             ])->count(),
-            'critical' => EmergencyCase::where('severity', 'critical')->count(),
-            'resolved' => EmergencyCase::whereIn('status', ['resolved', 'closed'])->count(),
+            'critical' => (clone $baseQuery)->where('severity', 'critical')->count(),
+            'resolved' => (clone $baseQuery)->whereIn('status', ['resolved', 'closed'])->count(),
         ];
 
-        $filters = $request->only([
-            'keyword',
-            'status',
-            'severity',
-            'case_type',
-            'district',
-            'date_from',
-            'date_to',
-            'card',
-        ]);
+        $query = EmergencyCase::with([
+            'animalType:id,name,slug,icon_class,color_code',
+            'reportType:id,name,slug,icon_class,color_code',
+            'animalCondition:id,name,slug,severity_level,icon_class,color_code',
+            'reporter:id,name,mobile',
+            'currentHandler:id,name,mobile',
+            'media',
+        ])->latest();
 
-        return view('admin.report-cases.index', compact(
+        if ($request->filled('keyword')) {
+            $keyword = $request->keyword;
+
+            $query->where(function ($q) use ($keyword) {
+                $q->where('case_uid', 'LIKE', "%{$keyword}%")
+                    ->orWhere('title', 'LIKE', "%{$keyword}%")
+                    ->orWhere('contact_number', 'LIKE', "%{$keyword}%")
+                    ->orWhere('full_address', 'LIKE', "%{$keyword}%")
+                    ->orWhere('city', 'LIKE', "%{$keyword}%")
+                    ->orWhere('district', 'LIKE', "%{$keyword}%")
+                    ->orWhereHas('reporter', function ($rq) use ($keyword) {
+                        $rq->where('name', 'LIKE', "%{$keyword}%")
+                            ->orWhere('mobile', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('currentHandler', function ($hq) use ($keyword) {
+                        $hq->where('name', 'LIKE', "%{$keyword}%")
+                            ->orWhere('mobile', 'LIKE', "%{$keyword}%");
+                    });
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
+        if ($request->filled('animal_type_id')) {
+            $query->where('animal_type_id', $request->animal_type_id);
+        }
+
+        if ($request->filled('report_type_id')) {
+            $query->where('report_type_id', $request->report_type_id);
+        }
+
+        if ($request->filled('animal_condition_id')) {
+            $query->where('animal_condition_id', $request->animal_condition_id);
+        }
+
+        if ($request->filled('district')) {
+            $query->where('district', 'LIKE', '%' . $request->district . '%');
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        if ($request->filled('card')) {
+            match ($request->card) {
+                'pending'  => $query->whereIn('status', ['reported', 'alerted']),
+                'active'   => $query->whereIn('status', [
+                    'accepted',
+                    'en_route',
+                    'reached_site',
+                    'rescue_in_progress',
+                    'needs_backup',
+                    'treatment_started',
+                    'shifted_to_gaushala',
+                    'escalated',
+                ]),
+                'critical' => $query->where('severity', 'critical'),
+                'resolved' => $query->whereIn('status', ['resolved', 'closed']),
+                default    => null,
+            };
+        }
+
+        $reports = $query->get();
+
+        $statuses = EmergencyCase::STATUSES;
+
+        $animalTypes = AnimalType::active()
+            ->ordered()
+            ->get();
+
+        $reportTypes = ReportType::active()
+            ->ordered()
+            ->get();
+
+        $animalConditions = AnimalCondition::active()
+            ->ordered()
+            ->get();
+
+        $responders = User::where('status', 'active')
+            ->orderBy('name')
+            ->get(['id', 'name', 'mobile']);
+
+        return view('admin.report-cases.manage-emergency-case', compact(
             'reports',
             'summary',
             'filters',
             'statuses',
+            'animalTypes',
+            'reportTypes',
+            'animalConditions',
             'responders'
         ));
     }
 
     public function show($id)
     {
-        abort_unless(Schema::hasTable('emergency_cases'), 404);
+        $case = EmergencyCase::with([
+            'animalType:id,name,slug,icon_class,color_code',
+            'reportType:id,name,slug,icon_class,color_code',
+            'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps,description',
+            'reporter:id,name,mobile',
+            'currentHandler:id,name,mobile',
+            'media',
+            'assignments.user:id,name,mobile',
+            'logs.user:id,name,mobile',
+            'alerts',
+        ])->findOrFail($id);
 
-        $report = DB::table('emergency_cases as ec')
-            ->leftJoin('users as reporter', 'reporter.id', '=', 'ec.reporter_id')
-            ->leftJoin('users as handler', 'handler.id', '=', 'ec.current_handler_id')
-            ->select(
-                'ec.*',
-                'reporter.name as reporter_name',
-                'reporter.mobile as reporter_mobile',
-                'handler.name as handler_name',
-                'handler.mobile as handler_mobile'
-            )
-            ->where('ec.id', $id)
-            ->first();
+        $report = $case;
 
-        abort_if(!$report, 404);
+        $media = $case->media;
 
-        $media = Schema::hasTable('emergency_case_media')
-            ? DB::table('emergency_case_media')
-                ->where('emergency_case_id', $id)
-                ->latest()
-                ->get()
-            : collect();
+        $logs = $case->logs()
+            ->with('user:id,name,mobile')
+            ->latest()
+            ->get();
 
-        $logs = Schema::hasTable('emergency_case_logs')
-            ? DB::table('emergency_case_logs as l')
-                ->leftJoin('users as u', 'u.id', '=', 'l.user_id')
-                ->select('l.*', 'u.name as user_name')
-                ->where('l.emergency_case_id', $id)
-                ->orderByDesc('l.id')
-                ->get()
-            : collect();
+        $assignments = $case->assignments()
+            ->with('user:id,name,mobile')
+            ->latest()
+            ->get();
 
-        $assignments = Schema::hasTable('emergency_case_assignments')
-            ? DB::table('emergency_case_assignments as a')
-                ->leftJoin('users as u', 'u.id', '=', 'a.user_id')
-                ->select('a.*', 'u.name as user_name', 'u.mobile as user_mobile')
-                ->where('a.emergency_case_id', $id)
-                ->latest('a.id')
-                ->get()
-            : collect();
+        $statuses = EmergencyCase::STATUSES;
 
-        return view('admin.report-cases.show', [
-            'report' => $report,
-            'media' => $media,
-            'logs' => $logs,
-            'assignments' => $assignments,
-            'statuses' => $this->statuses,
-            'responders' => $this->getResponderUsers(),
-        ]);
+        $responders = User::where('status', 'active')
+            ->orderBy('name')
+            ->get(['id', 'name', 'mobile']);
+
+        return view('admin.report-cases.show', compact(
+            'report',
+            'media',
+            'logs',
+            'assignments',
+            'statuses',
+            'responders'
+        ));
     }
 
     public function updateStatus(Request $request, $id)
     {
-        abort_unless(Schema::hasTable('emergency_cases'), 404);
-
-        $validated = $request->validate([
-            'status' => ['required', Rule::in($this->statuses)],
-            'notes' => ['nullable', 'string', 'max:1000'],
+        $request->validate([
+            'status' => ['required', Rule::in(EmergencyCase::STATUSES)],
+            'notes'  => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $report = DB::table('emergency_cases')->where('id', $id)->first();
-        abort_if(!$report, 404);
+        DB::beginTransaction();
 
-        $updateData = [
-            'status' => $validated['status'],
-            'updated_at' => now(),
-        ];
+        try {
+            $case = EmergencyCase::findOrFail($id);
 
-        if ($validated['status'] === 'accepted' && empty($report->accepted_at)) {
-            $updateData['accepted_at'] = now();
-        }
+            $oldStatus = $case->status;
+            $newStatus = $request->status;
 
-        if ($validated['status'] === 'en_route' && empty($report->en_route_at)) {
-            $updateData['en_route_at'] = now();
-        }
+            $updateData = [
+                'status' => $newStatus,
+            ];
 
-        if ($validated['status'] === 'reached_site' && empty($report->reached_at)) {
-            $updateData['reached_at'] = now();
-        }
+            if ($newStatus === 'accepted') {
+                $updateData['accepted_at'] = $case->accepted_at ?: now();
+            }
 
-        if ($validated['status'] === 'rescue_in_progress' && empty($report->rescue_started_at)) {
-            $updateData['rescue_started_at'] = now();
-        }
+            if ($newStatus === 'en_route') {
+                $updateData['en_route_at'] = now();
+            }
 
-        if ($validated['status'] === 'resolved') {
-            $updateData['resolved_at'] = now();
-        }
+            if ($newStatus === 'reached_site') {
+                $updateData['reached_at'] = now();
+            }
 
-        if ($validated['status'] === 'closed') {
-            $updateData['closed_at'] = now();
-        }
+            if ($newStatus === 'rescue_in_progress') {
+                $updateData['rescue_started_at'] = now();
+            }
 
-        DB::table('emergency_cases')->where('id', $id)->update($updateData);
+            if ($newStatus === 'resolved') {
+                $updateData['resolved_at'] = now();
+            }
 
-        $this->logCaseAction(
-            caseId: $id,
-            action: 'status_changed',
-            oldStatus: $report->status,
-            newStatus: $validated['status'],
-            notes: $validated['notes'] ?? 'Status updated from admin panel'
-        );
+            if ($newStatus === 'closed') {
+                $updateData['closed_at'] = now();
+                $updateData['closed_by'] = session('admin_id');
+            }
 
-        if ($request->ajax()) {
-            return response()->json([
-                'status' => true,
-                'message' => 'Case status updated successfully.',
+            $case->update($updateData);
+
+            EmergencyCaseLog::create([
+                'emergency_case_id' => $case->id,
+                'user_id'           => null,
+                'action'            => 'admin_status_changed',
+                'old_status'        => $oldStatus,
+                'new_status'        => $newStatus,
+                'notes'             => $request->notes,
+                'latitude'          => null,
+                'longitude'         => null,
+                'meta'              => [
+                    'changed_by_admin_id' => session('admin_id'),
+                ],
             ]);
-        }
 
-        return back()->with('success', 'Case status updated successfully.');
+            DB::commit();
+
+            return back()->with('success', 'Case status updated successfully.');
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            Log::error('Admin case status update failed', [
+                'case_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', config('app.debug') ? $e->getMessage() : 'Status update failed.');
+        }
     }
 
     public function assignHandler(Request $request, $id)
     {
-        abort_unless(Schema::hasTable('emergency_cases'), 404);
-
-        $validated = $request->validate([
+        $request->validate([
             'user_id' => ['required', 'exists:users,id'],
-            'notes' => ['nullable', 'string', 'max:1000'],
+            'notes'   => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $report = DB::table('emergency_cases')->where('id', $id)->first();
-        abort_if(!$report, 404);
+        DB::beginTransaction();
 
-        $handler = DB::table('users')
-            ->select('id', 'name', 'mobile')
-            ->where('id', $validated['user_id'])
-            ->first();
+        try {
+            $case = EmergencyCase::findOrFail($id);
+            $handler = User::findOrFail($request->user_id);
 
-        abort_if(!$handler, 404);
+            $oldHandlerId = $case->current_handler_id;
 
-        $caseUpdate = [
-            'current_handler_id' => $handler->id,
-            'updated_at' => now(),
-        ];
-
-        if (in_array($report->status, ['reported', 'alerted'])) {
-            $caseUpdate['status'] = 'accepted';
-        }
-
-        if (empty($report->accepted_at)) {
-            $caseUpdate['accepted_at'] = now();
-        }
-
-        DB::table('emergency_cases')->where('id', $id)->update($caseUpdate);
-
-        if (Schema::hasTable('emergency_case_assignments')) {
-            $existing = DB::table('emergency_case_assignments')
-                ->where('emergency_case_id', $id)
-                ->where('user_id', $handler->id)
-                ->first();
-
-            if ($existing) {
-                DB::table('emergency_case_assignments')
-                    ->where('id', $existing->id)
-                    ->update([
-                        'assignment_role' => 'primary_handler',
-                        'status' => 'accepted',
-                        'accepted_at' => $existing->accepted_at ?: now(),
-                        'notes' => $validated['notes'] ?? 'Assigned from admin panel',
-                        'updated_at' => now(),
-                    ]);
-            } else {
-                DB::table('emergency_case_assignments')->insert([
-                    'emergency_case_id' => $id,
-                    'user_id' => $handler->id,
-                    'assignment_role' => 'primary_handler',
-                    'status' => 'accepted',
-                    'accepted_at' => now(),
-                    'notes' => $validated['notes'] ?? 'Assigned from admin panel',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
-        }
-
-        $this->logCaseAction(
-            caseId: $id,
-            action: 'handler_assigned',
-            oldStatus: $report->status,
-            newStatus: in_array($report->status, ['reported', 'alerted']) ? 'accepted' : $report->status,
-            notes: 'Primary handler assigned: ' . ($handler->name ?? 'User')
-        );
-
-        if ($request->ajax()) {
-            return response()->json([
-                'status' => true,
-                'message' => 'Handler assigned successfully.',
+            $case->update([
+                'current_handler_id' => $handler->id,
+                'status'             => in_array($case->status, ['reported', 'alerted'])
+                    ? 'accepted'
+                    : $case->status,
+                'accepted_at'        => $case->accepted_at ?: now(),
             ]);
+
+            EmergencyCaseAssignment::create([
+                'emergency_case_id' => $case->id,
+                'user_id'           => $handler->id,
+                'assignment_role'   => 'primary_handler',
+                'status'            => 'assigned',
+                'notes'             => $request->notes,
+                'assigned_at'       => now(),
+            ]);
+
+            EmergencyCaseLog::create([
+                'emergency_case_id' => $case->id,
+                'user_id'           => $handler->id,
+                'action'            => 'admin_handler_assigned',
+                'old_status'        => null,
+                'new_status'        => $case->status,
+                'notes'             => $request->notes ?: 'Primary handler assigned by admin.',
+                'latitude'          => null,
+                'longitude'         => null,
+                'meta'              => [
+                    'changed_by_admin_id' => session('admin_id'),
+                    'old_handler_id'      => $oldHandlerId,
+                    'new_handler_id'      => $handler->id,
+                ],
+            ]);
+
+            DB::commit();
+
+            return back()->with('success', 'Handler assigned successfully.');
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            Log::error('Admin handler assign failed', [
+                'case_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', config('app.debug') ? $e->getMessage() : 'Handler assignment failed.');
         }
-
-        return back()->with('success', 'Handler assigned successfully.');
-    }
-
-    private function getResponderUsers()
-    {
-        if (!Schema::hasTable('users')) {
-            return collect();
-        }
-
-        $query = DB::table('users')->select('id', 'name', 'mobile');
-
-        if (Schema::hasColumn('users', 'status')) {
-            $query->where('status', 'active');
-        }
-
-        return $query->orderBy('name')->get();
-    }
-
-    private function logCaseAction(
-        int $caseId,
-        string $action,
-        ?string $oldStatus = null,
-        ?string $newStatus = null,
-        ?string $notes = null
-    ): void {
-        if (!Schema::hasTable('emergency_case_logs')) {
-            return;
-        }
-
-        DB::table('emergency_case_logs')->insert([
-            'emergency_case_id' => $caseId,
-            'user_id' => null,
-            'action' => $action,
-            'old_status' => $oldStatus,
-            'new_status' => $newStatus,
-            'notes' => $notes,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
     }
 }
