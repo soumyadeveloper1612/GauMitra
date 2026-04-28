@@ -13,6 +13,7 @@ Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
     Route::get('/report-types', [MasterDataController::class, 'reportTypes']);
     Route::get('/manage-conditions', [MasterDataController::class, 'cowConditions']);
     Route::get('/report-options', [MasterDataController::class, 'reportOptions']);
+Route::get('/animal-types', [MasterDataController::class, 'animalTypes']);
 
 Route::middleware('auth:sanctum')->group(function () {
 

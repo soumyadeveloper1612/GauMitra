@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CowCondition;
 use App\Models\ReportType;
+use App\Models\AnimalType;
 use Illuminate\Http\Request;
 
 class MasterDataController extends Controller
@@ -105,4 +106,27 @@ class MasterDataController extends Controller
             'data'    => $reportTypes,
         ]);
     }
+
+    public function animalTypes()
+{
+    $animalTypes = AnimalType::active()
+        ->ordered()
+        ->get()
+        ->map(function ($item) {
+            return [
+                'id'          => $item->id,
+                'name'        => $item->name,
+                'slug'        => $item->slug,
+                'icon_class'  => $item->icon_class,
+                'color_code'  => $item->color_code,
+                'description' => $item->description,
+            ];
+        });
+
+    return response()->json([
+        'status'  => true,
+        'message' => 'Animal types fetched successfully.',
+        'data'    => $animalTypes,
+    ]);
+}
 }
