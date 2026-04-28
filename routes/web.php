@@ -90,7 +90,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         | Gaushala
         |--------------------------------------------------------------------------
         */
-
         Route::prefix('gaushalas')->name('gaushalas.')->group(function () {
             Route::get('/', [GaushalaController::class, 'index'])
                 ->middleware('admin.permission:gaushala.view')
@@ -103,6 +102,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/store', [GaushalaController::class, 'store'])
                 ->middleware('admin.permission:gaushala.create')
                 ->name('store');
+
+            Route::put('/update/{id}', [GaushalaController::class, 'update'])
+                ->middleware('admin.permission:gaushala.create')
+                ->name('update');
+
+            Route::delete('/delete/{id}', [GaushalaController::class, 'destroy'])
+                ->middleware('admin.permission:gaushala.create')
+                ->name('destroy');
 
             Route::get('/{id}', [GaushalaController::class, 'show'])
                 ->middleware('admin.permission:gaushala.view')
