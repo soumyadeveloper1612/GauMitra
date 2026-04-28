@@ -208,10 +208,10 @@ Route::prefix('super-admin')->name('superadmin.')->middleware(['admin.auth', 'su
 Route::prefix('admin')->name('admin.')->middleware(['web', 'admin.auth'])->group(function () {
 
     Route::get('/report-types', [ReportTypeController::class, 'index'])->name('report-types.index');
-    Route::get('/report-types/create', [ReportTypeController::class, 'create'])->name('report-types.create');
-    Route::post('/report-types/store', [ReportTypeController::class, 'store'])->name('report-types.store');
-    Route::put('/report-types/update/{id}', [ReportTypeController::class, 'update'])->name('report-types.update');
-    Route::delete('/report-types/delete/{id}', [ReportTypeController::class, 'destroy'])->name('report-types.destroy');
+    Route::get('/report-types/create', [ReportTypeController::class, 'create'])->name('admin.report-types.create');
+    Route::post('/report-types/store', [ReportTypeController::class, 'store'])->name('admin.report-types.store');
+    Route::put('/report-types/update/{id}', [ReportTypeController::class, 'update'])->name('admin.report-types.update');
+    Route::delete('/report-types/delete/{id}', [ReportTypeController::class, 'destroy'])->name('admin.report-types.destroy');
 
     Route::get('/cow-conditions', [CowConditionController::class, 'index'])->name('cow-conditions.index');
     Route::get('/cow-conditions/create', [CowConditionController::class, 'create'])->name('cow-conditions.create');
