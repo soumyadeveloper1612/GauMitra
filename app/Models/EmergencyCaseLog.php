@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class EmergencyCaseLog extends Model
 {
+    protected $table = 'emergency_case_logs';
+
     protected $fillable = [
         'emergency_case_id',
         'user_id',
@@ -24,11 +26,11 @@ class EmergencyCaseLog extends Model
 
     public function emergencyCase()
     {
-        return $this->belongsTo(EmergencyCase::class);
+        return $this->belongsTo(EmergencyCase::class, 'emergency_case_id');
     }
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

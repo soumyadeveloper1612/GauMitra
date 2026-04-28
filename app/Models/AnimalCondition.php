@@ -5,9 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class CowCondition extends Model
+class AnimalCondition extends Model
 {
     use HasFactory;
+
+    protected $table = 'animal_conditions';
 
     protected $fillable = [
         'report_type_id',

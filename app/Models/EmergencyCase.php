@@ -17,6 +17,11 @@ class EmergencyCase extends Model
         'current_handler_id',
         'parent_case_id',
         'closed_by',
+
+        'animal_type_id',
+        'report_type_id',
+        'animal_condition_id',
+
         'case_type',
         'title',
         'description',
@@ -50,26 +55,15 @@ class EmergencyCase extends Model
     ];
 
     protected $casts = [
-        'latitude' => 'decimal:7',
-        'longitude' => 'decimal:7',
-        'accepted_at' => 'datetime',
-        'en_route_at' => 'datetime',
-        'reached_at' => 'datetime',
+        'latitude'          => 'decimal:7',
+        'longitude'         => 'decimal:7',
+        'accepted_at'       => 'datetime',
+        'en_route_at'       => 'datetime',
+        'reached_at'        => 'datetime',
         'rescue_started_at' => 'datetime',
-        'resolved_at' => 'datetime',
-        'closed_at' => 'datetime',
-        'is_duplicate' => 'boolean',
-    ];
-
-    public const TYPES = [
-        'accident',
-        'injured_cattle',
-        'illegal_transport',
-        'abandoned_cattle',
-        'dead_cattle',
-        'medical_emergency',
-        'missing_cattle',
-        'rescue_needed',
+        'resolved_at'       => 'datetime',
+        'closed_at'         => 'datetime',
+        'is_duplicate'      => 'boolean',
     ];
 
     public const SEVERITIES = ['low', 'medium', 'high', 'critical'];
@@ -93,6 +87,21 @@ class EmergencyCase extends Model
         'escalated',
     ];
 
+    public function animalType()
+    {
+        return $this->belongsTo(AnimalType::class, 'animal_type_id');
+    }
+
+    public function reportType()
+    {
+        return $this->belongsTo(ReportType::class, 'report_type_id');
+    }
+
+    public function animalCondition()
+    {
+        return $this->belongsTo(AnimalCondition::class, 'animal_condition_id');
+    }
+
     public function reporter()
     {
         return $this->belongsTo(User::class, 'reporter_id');
@@ -105,22 +114,34 @@ class EmergencyCase extends Model
 
     public function media()
     {
-        return $this->hasMany(EmergencyCaseMedia::class);
+        return $this->hasMany(EmergencyCaseMedia::class, 'emergency_case_id');
+    }
+
+    public function photos()
+    {
+        return $this->hasMany(EmergencyCaseMedia::class, 'emergency_case_id')
+            ->where('media_type', 'photo');
+    }
+
+    public function videos()
+    {
+        return $this->hasMany(EmergencyCaseMedia::class, 'emergency_case_id')
+            ->where('media_type', 'video');
     }
 
     public function logs()
     {
-        return $this->hasMany(EmergencyCaseLog::class);
+        return $this->hasMany(EmergencyCaseLog::class, 'emergency_case_id');
     }
 
     public function assignments()
     {
-        return $this->hasMany(EmergencyCaseAssignment::class);
+        return $this->hasMany(EmergencyCaseAssignment::class, 'emergency_case_id');
     }
 
     public function alerts()
     {
-        return $this->hasMany(EmergencyCaseAlert::class);
+        return $this->hasMany(EmergencyCaseAlert::class, 'emergency_case_id');
     }
 
     public function scopeOpen($query)

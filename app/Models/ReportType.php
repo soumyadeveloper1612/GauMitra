@@ -19,14 +19,14 @@ class ReportType extends Model
         'status',
     ];
 
-    public function cowConditions()
+    public function animalConditions()
     {
-        return $this->hasMany(CowCondition::class, 'report_type_id');
+        return $this->hasMany(AnimalCondition::class, 'report_type_id');
     }
 
-    public function activeCowConditions()
+    public function activeAnimalConditions()
     {
-        return $this->hasMany(CowCondition::class, 'report_type_id')
+        return $this->hasMany(AnimalCondition::class, 'report_type_id')
             ->where('status', 'active')
             ->orderBy('sort_order')
             ->orderBy('name');
