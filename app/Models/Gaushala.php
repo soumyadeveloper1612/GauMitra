@@ -27,8 +27,6 @@ class Gaushala extends Model
         'registration_proof',
         'working_hours',
         'emergency_availability',
-        'latitude',
-        'longitude',
         'status',
     ];
 
@@ -37,7 +35,16 @@ class Gaushala extends Model
         'doctor'            => 'boolean',
         'food_support'      => 'boolean',
         'temporary_shelter' => 'boolean',
-        'latitude'          => 'decimal:7',
-        'longitude'         => 'decimal:7',
     ];
+
+    public function members()
+    {
+        return $this->hasMany(GaushalaMember::class, 'gaushala_id');
+    }
+
+    public function activeMembers()
+    {
+        return $this->hasMany(GaushalaMember::class, 'gaushala_id')
+            ->where('status', 'active');
+    }
 }
