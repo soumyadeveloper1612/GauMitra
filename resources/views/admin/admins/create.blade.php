@@ -5,6 +5,7 @@
 @section('header_subtitle', 'Add a new admin and assign roles')
 
 @section('content')
+
 @include('admin.layouts.components.admin-theme')
 
 <div class="gm-page-hero">
