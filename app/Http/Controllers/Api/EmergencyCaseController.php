@@ -38,7 +38,7 @@ class EmergencyCaseController extends Controller
                 'animalCondition:id,name,slug,severity_level,icon_class,color_code',
                 'reporter:id,name,mobile',
                 'currentHandler:id,name,mobile',
-                'media',
+                'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
             ])
             ->latest();
 
@@ -66,12 +66,112 @@ class EmergencyCaseController extends Controller
             $query->where('city', 'LIKE', '%' . $request->city . '%');
         }
 
-        $cases = $query->paginate($request->get('per_page', 15));
+        if ($request->filled('district')) {
+            $query->where('district', 'LIKE', '%' . $request->district . '%');
+        }
+
+        if ($request->filled('pincode')) {
+            $query->where('pincode', $request->pincode);
+        }
+
+        if ($request->filled('from_date')) {
+            $query->whereDate('created_at', '>=', $request->from_date);
+        }
+
+        if ($request->filled('to_date')) {
+            $query->whereDate('created_at', '<=', $request->to_date);
+        }
+
+        $perPage = (int) $request->get('per_page', 15);
+        $perPage = $perPage > 100 ? 100 : $perPage;
+
+        $cases = $query->paginate($perPage);
+
+        $cases->getCollection()->transform(function ($case) {
+            $case->media_count = $case->media->count();
+
+            $case->photo_count = $case->media
+                ->where('media_type', 'photo')
+                ->count();
+
+            $case->video_count = $case->media
+                ->where('media_type', 'video')
+                ->count();
+
+            $case->photo_urls = $case->media
+                ->where('media_type', 'photo')
+                ->pluck('file_url')
+                ->values();
+
+            $case->video_urls = $case->media
+                ->where('media_type', 'video')
+                ->pluck('file_url')
+                ->values();
+
+            return $case;
+        });
 
         return response()->json([
             'status'  => true,
             'message' => 'Emergency cases fetched successfully.',
             'data'    => $cases,
+        ]);
+    }
+
+    public function show($id)
+    {
+        $case = EmergencyCase::with([
+                'animalType:id,name,slug,icon_class,color_code',
+                'reportType:id,name,slug,icon_class,color_code',
+                'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps,description',
+                'reporter:id,name,mobile',
+                'currentHandler:id,name,mobile',
+                'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
+                'logs' => function ($query) {
+                    $query->latest();
+                },
+            ])
+            ->find($id);
+
+        if (!$case) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Emergency case not found.',
+            ], 404);
+        }
+
+        $case->media_count = $case->media->count();
+
+        $case->photo_count = $case->media
+            ->where('media_type', 'photo')
+            ->count();
+
+        $case->video_count = $case->media
+            ->where('media_type', 'video')
+            ->count();
+
+        $case->photos = $case->media
+            ->where('media_type', 'photo')
+            ->values();
+
+        $case->videos = $case->media
+            ->where('media_type', 'video')
+            ->values();
+
+        $case->photo_urls = $case->media
+            ->where('media_type', 'photo')
+            ->pluck('file_url')
+            ->values();
+
+        $case->video_urls = $case->media
+            ->where('media_type', 'video')
+            ->pluck('file_url')
+            ->values();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Emergency case details fetched successfully.',
+            'data'    => $case,
         ]);
     }
 
@@ -624,27 +724,6 @@ class EmergencyCaseController extends Controller
             'saved_count' => $savedCount,
             'debug'       => $debug,
         ];
-    }
-
-    public function show($id)
-    {
-        $case = EmergencyCase::with([
-            'animalType:id,name,slug,icon_class,color_code',
-            'reportType:id,name,slug,icon_class,color_code',
-            'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps',
-            'reporter:id,name,mobile',
-            'currentHandler:id,name,mobile',
-            'media',
-            'assignments.user:id,name,mobile',
-            'logs.user:id,name,mobile',
-            'alerts',
-        ])->findOrFail($id);
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'Emergency case details fetched successfully.',
-            'data'    => $case,
-        ]);
     }
 
     public function acceptReport(Request $request, $id)

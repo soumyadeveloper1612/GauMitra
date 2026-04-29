@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class EmergencyCaseMedia extends Model
 {
@@ -21,6 +20,7 @@ class EmergencyCaseMedia extends Model
 
     protected $appends = [
         'file_url',
+        'formatted_file_size',
     ];
 
     public function emergencyCase()
@@ -39,6 +39,23 @@ class EmergencyCaseMedia extends Model
             return null;
         }
 
-        return asset('storage/' . $this->file_path);
+        if (str_starts_with($this->file_path, 'http://') || str_starts_with($this->file_path, 'https://')) {
+            return $this->file_path;
+        }
+
+        return asset('storage/' . ltrim($this->file_path, '/'));
+    }
+
+    public function getFormattedFileSizeAttribute()
+    {
+        if (!$this->file_size) {
+            return null;
+        }
+
+        if ($this->file_size >= 1024 * 1024) {
+            return round($this->file_size / (1024 * 1024), 2) . ' MB';
+        }
+
+        return round($this->file_size / 1024, 2) . ' KB';
     }
 }
