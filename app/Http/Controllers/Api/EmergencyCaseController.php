@@ -30,174 +30,6 @@ class EmergencyCaseController extends Controller
     ) {
     }
 
-    public function index(Request $request)
-    {
-        try {
-            $query = EmergencyCase::query()
-                ->with([
-                    'animalType:id,name,slug,icon_class,color_code',
-                    'reportType:id,name,slug,icon_class,color_code',
-                    'animalCondition:id,name,slug,severity_level,icon_class,color_code',
-                    'reporter:id,name,mobile',
-                    'currentHandler:id,name,mobile',
-                    'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
-                ])
-                ->latest();
-
-            if ($request->filled('status')) {
-                $query->where('status', $request->status);
-            }
-
-            if ($request->filled('animal_type_id')) {
-                $query->where('animal_type_id', $request->animal_type_id);
-            }
-
-            if ($request->filled('report_type_id')) {
-                $query->where('report_type_id', $request->report_type_id);
-            }
-
-            if ($request->filled('animal_condition_id')) {
-                $query->where('animal_condition_id', $request->animal_condition_id);
-            }
-
-            if ($request->filled('severity')) {
-                $query->where('severity', $request->severity);
-            }
-
-            if ($request->filled('city')) {
-                $query->where('city', 'LIKE', '%' . $request->city . '%');
-            }
-
-            if ($request->filled('district')) {
-                $query->where('district', 'LIKE', '%' . $request->district . '%');
-            }
-
-            if ($request->filled('pincode')) {
-                $query->where('pincode', $request->pincode);
-            }
-
-            if ($request->filled('from_date')) {
-                $query->whereDate('created_at', '>=', $request->from_date);
-            }
-
-            if ($request->filled('to_date')) {
-                $query->whereDate('created_at', '<=', $request->to_date);
-            }
-
-            $perPage = (int) $request->get('per_page', 15);
-
-            if ($perPage <= 0) {
-                $perPage = 15;
-            }
-
-            if ($perPage > 100) {
-                $perPage = 100;
-            }
-
-            $cases = $query->paginate($perPage);
-
-            $cases->getCollection()->transform(function ($case) {
-                $media = $case->media ?? collect();
-
-                $photos = $media->where('media_type', 'photo')->values();
-                $videos = $media->where('media_type', 'video')->values();
-
-                $case->media_count = $media->count();
-                $case->photo_count = $photos->count();
-                $case->video_count = $videos->count();
-
-                $case->photos = $photos;
-                $case->videos = $videos;
-
-                $case->photo_urls = $photos->pluck('file_url')->filter()->values();
-                $case->video_urls = $videos->pluck('file_url')->filter()->values();
-
-                return $case;
-            });
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'Emergency cases fetched successfully.',
-                'data'    => $cases,
-            ]);
-
-        } catch (\Throwable $e) {
-            \Log::error('Emergency cases index failed', [
-                'message' => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
-            ]);
-
-            return response()->json([
-                'status'  => false,
-                'message' => 'Server error while fetching emergency cases.',
-                'error'   => config('app.debug') ? $e->getMessage() : null,
-                'line'    => config('app.debug') ? $e->getLine() : null,
-            ], 500);
-        }
-    }
-
-    public function show($id)
-    {
-        try {
-            $case = EmergencyCase::with([
-                    'animalType:id,name,slug,icon_class,color_code',
-                    'reportType:id,name,slug,icon_class,color_code',
-                    'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps,description',
-                    'reporter:id,name,mobile',
-                    'currentHandler:id,name,mobile',
-                    'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
-                    'logs' => function ($query) {
-                        $query->latest();
-                    },
-                ])
-                ->find($id);
-
-            if (!$case) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Emergency case not found.',
-                ], 404);
-            }
-
-            $media = $case->media ?? collect();
-
-            $photos = $media->where('media_type', 'photo')->values();
-            $videos = $media->where('media_type', 'video')->values();
-
-            $case->media_count = $media->count();
-            $case->photo_count = $photos->count();
-            $case->video_count = $videos->count();
-
-            $case->photos = $photos;
-            $case->videos = $videos;
-
-            $case->photo_urls = $photos->pluck('file_url')->filter()->values();
-            $case->video_urls = $videos->pluck('file_url')->filter()->values();
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'Emergency case details fetched successfully.',
-                'data'    => $case,
-            ]);
-
-        } catch (\Throwable $e) {
-            \Log::error('Emergency case show failed', [
-                'case_id' => $id,
-                'message' => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
-            ]);
-
-            return response()->json([
-                'status'  => false,
-                'message' => 'Server error while fetching emergency case details.',
-                'error'   => config('app.debug') ? $e->getMessage() : null,
-                'line'    => config('app.debug') ? $e->getLine() : null,
-            ], 500);
-        }
-    }
-
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -1291,4 +1123,388 @@ class EmergencyCaseController extends Controller
 
         return $uid;
     }
+
+
+    public function myReports(Request $request)
+    {
+        try {
+            $userId = auth('sanctum')->id();
+
+            $query = EmergencyCase::with($this->caseRelations(false, true))
+                ->where('reporter_id', $userId)
+                ->latest();
+
+            $this->applyCommonFilters($query, $request);
+
+            $perPage = $this->getPerPage($request);
+
+            $cases = $query->paginate($perPage);
+
+            $cases->getCollection()->transform(function ($case) {
+                return $this->appendMediaSummary($case);
+            });
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'My emergency reports fetched successfully.',
+                'data'    => $cases,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('My emergency reports fetch failed', [
+                'user_id' => auth('sanctum')->id(),
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error while fetching my emergency reports.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+    public function myReportDetails($id)
+    {
+        try {
+            $userId = auth('sanctum')->id();
+
+            $case = EmergencyCase::with($this->caseRelations(true, true))
+                ->where('reporter_id', $userId)
+                ->find($id);
+
+            if (!$case) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Emergency report not found.',
+                ], 404);
+            }
+
+            $case = $this->appendMediaSummary($case);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'My emergency report details fetched successfully.',
+                'data'    => $case,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('My emergency report details fetch failed', [
+                'case_id' => $id,
+                'user_id' => auth('sanctum')->id(),
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error while fetching report details.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+    public function areaWiseReports(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'district'  => ['required', 'string', 'max:150'],
+                'city'      => ['nullable', 'string', 'max:150'],
+                'area_name' => ['nullable', 'string', 'max:150'],
+                'pincode'   => ['nullable', 'digits:6'],
+                'latitude'  => ['nullable', 'numeric', 'between:-90,90'],
+                'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+                'radius_km' => ['nullable', 'numeric', 'min:1', 'max:100'],
+                'severity'  => ['nullable', Rule::in(EmergencyCase::SEVERITIES)],
+                'status'    => ['nullable', Rule::in(EmergencyCase::STATUSES)],
+                'per_page'  => ['nullable', 'integer', 'min:1', 'max:100'],
+            ], [
+                'district.required' => 'District is required for area wise reports.',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Validation failed.',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            $query = EmergencyCase::with($this->caseRelations(false, false))
+                ->open()
+                ->where(function ($q) use ($request) {
+                    $this->whereTextEquals($q, 'district', $request->district);
+
+                    if ($request->filled('pincode')) {
+                        $q->orWhere('pincode', $request->pincode);
+                    }
+                })
+                ->latest();
+
+            if ($request->filled('city')) {
+                $query->whereRaw('LOWER(TRIM(city)) = ?', [
+                    strtolower(trim($request->city)),
+                ]);
+            }
+
+            if ($request->filled('area_name')) {
+                $query->whereRaw('LOWER(TRIM(area_name)) = ?', [
+                    strtolower(trim($request->area_name)),
+                ]);
+            }
+
+            if ($request->filled('severity')) {
+                $query->where('severity', $request->severity);
+            }
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('latitude') && $request->filled('longitude')) {
+                $radiusKm = (float) $request->get('radius_km', 25);
+
+                $this->applyRadiusFilter(
+                    $query,
+                    (float) $request->latitude,
+                    (float) $request->longitude,
+                    $radiusKm
+                );
+            }
+
+            $perPage = $this->getPerPage($request);
+
+            $cases = $query->paginate($perPage);
+
+            $cases->getCollection()->transform(function ($case) {
+                return $this->appendMediaSummary($case);
+            });
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Area wise emergency reports fetched successfully.',
+                'filters' => [
+                    'district'  => $request->district,
+                    'city'      => $request->city,
+                    'area_name' => $request->area_name,
+                    'pincode'   => $request->pincode,
+                    'latitude'  => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'radius_km' => $request->radius_km,
+                ],
+                'data'    => $cases,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Area wise emergency reports fetch failed', [
+                'district' => $request->district,
+                'error'    => $e->getMessage(),
+                'file'     => $e->getFile(),
+                'line'     => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error while fetching area wise reports.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+
+    public function areaWiseReportDetails(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'district' => ['required', 'string', 'max:150'],
+            ], [
+                'district.required' => 'District is required for area wise report details.',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Validation failed.',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            $case = EmergencyCase::with($this->caseRelations(true, false))
+                ->open()
+                ->where(function ($q) use ($request) {
+                    $this->whereTextEquals($q, 'district', $request->district);
+
+                    if ($request->filled('pincode')) {
+                        $q->orWhere('pincode', $request->pincode);
+                    }
+                })
+                ->find($id);
+
+            if (!$case) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Emergency report not found in this district.',
+                ], 404);
+            }
+
+            $case = $this->appendMediaSummary($case);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Area wise emergency report details fetched successfully.',
+                'data'    => $case,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Area wise emergency report details fetch failed', [
+                'case_id'  => $id,
+                'district' => $request->district,
+                'error'    => $e->getMessage(),
+                'file'     => $e->getFile(),
+                'line'     => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error while fetching area wise report details.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+    private function caseRelations(bool $withLogs = false, bool $privateUserData = true): array
+    {
+        $relations = [
+            'animalType:id,name,slug,icon_class,color_code',
+            'reportType:id,name,slug,icon_class,color_code',
+            'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps,description',
+            $privateUserData
+                ? 'reporter:id,name,mobile'
+                : 'reporter:id,name',
+            $privateUserData
+                ? 'currentHandler:id,name,mobile'
+                : 'currentHandler:id,name',
+            'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
+        ];
+
+        if ($withLogs) {
+            $relations['logs'] = function ($query) {
+                $query->latest();
+            };
+        }
+
+        return $relations;
+    }
+
+    private function applyCommonFilters($query, Request $request): void
+    {
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('animal_type_id')) {
+            $query->where('animal_type_id', $request->animal_type_id);
+        }
+
+        if ($request->filled('report_type_id')) {
+            $query->where('report_type_id', $request->report_type_id);
+        }
+
+        if ($request->filled('animal_condition_id')) {
+            $query->where('animal_condition_id', $request->animal_condition_id);
+        }
+
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
+        if ($request->filled('city')) {
+            $query->where('city', 'LIKE', '%' . $request->city . '%');
+        }
+
+        if ($request->filled('district')) {
+            $query->where('district', 'LIKE', '%' . $request->district . '%');
+        }
+
+        if ($request->filled('pincode')) {
+            $query->where('pincode', $request->pincode);
+        }
+
+        if ($request->filled('from_date')) {
+            $query->whereDate('created_at', '>=', $request->from_date);
+        }
+
+        if ($request->filled('to_date')) {
+            $query->whereDate('created_at', '<=', $request->to_date);
+        }
+    }
+
+    private function appendMediaSummary(EmergencyCase $case): EmergencyCase
+    {
+        $media = $case->media ?? collect();
+
+        $photos = $media->where('media_type', 'photo')->values();
+        $videos = $media->where('media_type', 'video')->values();
+
+        $case->setAttribute('media_count', $media->count());
+        $case->setAttribute('photo_count', $photos->count());
+        $case->setAttribute('video_count', $videos->count());
+
+        $case->setAttribute('photos', $photos);
+        $case->setAttribute('videos', $videos);
+
+        $case->setAttribute('photo_urls', $photos->pluck('file_url')->filter()->values());
+        $case->setAttribute('video_urls', $videos->pluck('file_url')->filter()->values());
+
+        return $case;
+    }
+
+    private function getPerPage(Request $request): int
+    {
+        $perPage = (int) $request->get('per_page', 15);
+
+        if ($perPage <= 0) {
+            return 15;
+        }
+
+        return min($perPage, 100);
+    }
+
+    private function whereTextEquals($query, string $column, ?string $value): void
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return;
+        }
+
+        $query->whereRaw("LOWER(TRIM($column)) = ?", [
+            strtolower($value),
+        ]);
+    }
+
+
+    private function applyRadiusFilter($query, float $latitude, float $longitude, float $radiusKm): void
+    {
+        $query->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->whereRaw(
+                '(6371 * ACOS(LEAST(1, GREATEST(-1,
+                    COS(RADIANS(?)) *
+                    COS(RADIANS(latitude)) *
+                    COS(RADIANS(longitude) - RADIANS(?)) +
+                    SIN(RADIANS(?)) *
+                    SIN(RADIANS(latitude))
+                )))) <= ?',
+                [$latitude, $longitude, $latitude, $radiusKm]
+            );
+    }
+    
 }
