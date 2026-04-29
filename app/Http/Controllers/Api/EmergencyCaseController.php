@@ -18,6 +18,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use App\Services\FirebasePushService;
 use App\Services\EmergencyCaseAlertService;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class EmergencyCaseController extends Controller
 {
@@ -102,43 +104,26 @@ class EmergencyCaseController extends Controller
             'latitude'             => ['required', 'numeric', 'between:-90,90'],
             'longitude'            => ['required', 'numeric', 'between:-180,180'],
 
-            'photos'               => ['nullable', 'array'],
-            'photos.*'             => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-
-            'videos'               => ['nullable', 'array'],
-            'videos.*'             => [
-                'nullable',
-                'file',
-                'mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm,video/x-matroska',
-                'max:51200',
-            ],
+            // keep nullable only. File validation is handled inside saveEmergencyCaseMedia()
+            'photos'               => ['nullable'],
+            'photos.*'             => ['nullable'],
+            'videos'               => ['nullable'],
+            'videos.*'             => ['nullable'],
         ], [
-            'animal_type_id.required'      => 'Animal type is required.',
-            'animal_type_id.exists'        => 'Selected animal type is invalid.',
-
-            'report_type_id.required'      => 'Report type is required.',
-            'report_type_id.exists'        => 'Selected report type is invalid.',
-
-            'animal_condition_id.exists'   => 'Selected animal condition is invalid.',
-
-            'severity.in'                  => 'Severity must be low, medium, high or critical.',
-            'contact_number.required'      => 'Contact number is required.',
-            'contact_number.digits'        => 'Contact number must be 10 digits.',
-
-            'full_address.required'        => 'Full address is required.',
-            'city.required'                => 'City is required.',
-
-            'latitude.required'            => 'Latitude is required.',
-            'latitude.between'             => 'Latitude must be between -90 and 90.',
-            'longitude.required'           => 'Longitude is required.',
-            'longitude.between'            => 'Longitude must be between -180 and 180.',
-
-            'photos.*.image'               => 'Photos must be valid image files.',
-            'photos.*.mimes'               => 'Photos must be jpg, jpeg, png or webp.',
-            'photos.*.max'                 => 'Each photo must be less than 5MB.',
-
-            'videos.*.mimetypes'           => 'Videos must be mp4, mov, avi, webm or mkv.',
-            'videos.*.max'                 => 'Each video must be less than 50MB.',
+            'animal_type_id.required'     => 'Animal type is required.',
+            'animal_type_id.exists'       => 'Selected animal type is invalid.',
+            'report_type_id.required'     => 'Report type is required.',
+            'report_type_id.exists'       => 'Selected report type is invalid.',
+            'animal_condition_id.exists'  => 'Selected animal condition is invalid.',
+            'severity.in'                 => 'Severity must be low, medium, high or critical.',
+            'contact_number.required'     => 'Contact number is required.',
+            'contact_number.digits'       => 'Contact number must be 10 digits.',
+            'full_address.required'       => 'Full address is required.',
+            'city.required'               => 'City is required.',
+            'latitude.required'           => 'Latitude is required.',
+            'latitude.between'            => 'Latitude must be between -90 and 90.',
+            'longitude.required'          => 'Longitude is required.',
+            'longitude.between'           => 'Longitude must be between -180 and 180.',
         ]);
 
         $validator->after(function ($validator) use ($request) {
@@ -218,7 +203,6 @@ class EmergencyCaseController extends Controller
                 'animal_condition_id'  => $animalCondition?->id,
 
                 'case_type'            => $reportType->slug,
-
                 'title'                => $request->title ?: $reportType->name,
                 'description'          => $request->description,
                 'severity'             => $severity,
@@ -246,12 +230,8 @@ class EmergencyCaseController extends Controller
                 'escalation_level'     => 0,
             ]);
 
-            /*
-            |--------------------------------------------------------------------------
-            | Save Photos and Videos
-            |--------------------------------------------------------------------------
-            */
-            $mediaSavedCount = $this->saveEmergencyCaseMedia($request, $case);
+            $mediaResult = $this->saveEmergencyCaseMedia($request, $case);
+            $mediaSavedCount = $mediaResult['saved_count'];
 
             EmergencyCaseLog::create([
                 'emergency_case_id' => $case->id,
@@ -267,6 +247,7 @@ class EmergencyCaseController extends Controller
                     'report_type_id'      => $reportType->id,
                     'animal_condition_id' => $animalCondition?->id,
                     'media_saved_count'   => $mediaSavedCount,
+                    'upload_debug'        => $mediaResult['debug'],
                 ],
             ]);
 
@@ -280,11 +261,6 @@ class EmergencyCaseController extends Controller
                 'media',
             ]);
 
-            /*
-            |--------------------------------------------------------------------------
-            | Reporter Confirmation Notification
-            |--------------------------------------------------------------------------
-            */
             $pushResult = [
                 'success_count' => 0,
                 'failure_count' => 0,
@@ -330,11 +306,6 @@ class EmergencyCaseController extends Controller
                 ];
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | Severity Wise Nearby Alert Notification
-            |--------------------------------------------------------------------------
-            */
             $severityAlertResult = [
                 'success_count' => 0,
                 'failure_count' => 0,
@@ -365,6 +336,7 @@ class EmergencyCaseController extends Controller
                 'data'                  => $case,
                 'media_count'           => $case->media->count(),
                 'media_saved_count'     => $mediaSavedCount,
+                'upload_debug'          => $mediaResult['debug'],
                 'reporter_push_result'  => $pushResult,
                 'severity_alert_result' => $severityAlertResult,
                 'alerted_users'         => $severityAlertResult['success_count'] ?? 0,
@@ -389,24 +361,33 @@ class EmergencyCaseController extends Controller
         }
     }
 
-    private function saveEmergencyCaseMedia(Request $request, EmergencyCase $case): int
+    private function saveEmergencyCaseMedia(Request $request, EmergencyCase $case): array
     {
         $savedCount = 0;
         $userId = auth('sanctum')->id();
 
+        $allFiles = $request->allFiles();
+
+        $debug = [
+            'content_type'           => $request->header('Content-Type'),
+            'content_length'         => $request->header('Content-Length'),
+            'all_file_keys'          => array_keys($allFiles),
+            'has_photos'             => $request->hasFile('photos'),
+            'has_videos'             => $request->hasFile('videos'),
+            'php_file_uploads'       => ini_get('file_uploads'),
+            'php_upload_max_filesize'=> ini_get('upload_max_filesize'),
+            'php_post_max_size'      => ini_get('post_max_size'),
+            'php_max_file_uploads'   => ini_get('max_file_uploads'),
+            'saved_files'            => [],
+            'skipped_files'          => [],
+        ];
+
         Log::info('Emergency media request files received', [
-            'case_id'    => $case->id,
-            'case_uid'   => $case->case_uid,
-            'file_keys'  => array_keys($request->allFiles()),
-            'has_photos' => $request->hasFile('photos'),
-            'has_videos' => $request->hasFile('videos'),
+            'case_id' => $case->id,
+            'case_uid' => $case->case_uid,
+            'debug' => $debug,
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | Convert single/multiple/nested uploaded files into flat array
-        |--------------------------------------------------------------------------
-        */
         $normalizeFiles = function ($files) use (&$normalizeFiles): array {
             $normalized = [];
 
@@ -423,32 +404,90 @@ class EmergencyCaseController extends Controller
             return $normalized;
         };
 
-        /*
-        |--------------------------------------------------------------------------
-        | Save single file
-        |--------------------------------------------------------------------------
-        */
-        $saveFile = function (UploadedFile $file, string $mediaType) use ($case, $userId, &$savedCount): void {
+        $isPhoto = function (UploadedFile $file): bool {
+            $mime = strtolower((string) $file->getMimeType());
+            $ext = strtolower((string) $file->getClientOriginalExtension());
+
+            return str_starts_with($mime, 'image/')
+                || in_array($ext, ['jpg', 'jpeg', 'png', 'webp']);
+        };
+
+        $isVideo = function (UploadedFile $file): bool {
+            $mime = strtolower((string) $file->getMimeType());
+            $ext = strtolower((string) $file->getClientOriginalExtension());
+
+            return str_starts_with($mime, 'video/')
+                || in_array($ext, ['mp4', 'mov', 'avi', 'webm', 'mkv']);
+        };
+
+        $saveFile = function (UploadedFile $file, string $mediaType) use ($case, $userId, &$savedCount, &$debug, $isPhoto, $isVideo): void {
             if (!$file->isValid()) {
+                $debug['skipped_files'][] = [
+                    'reason'      => 'invalid_upload',
+                    'media_type'  => $mediaType,
+                    'error_code'  => $file->getError(),
+                    'error_msg'   => $file->getErrorMessage(),
+                    'file_name'   => $file->getClientOriginalName(),
+                ];
+
                 Log::warning('Invalid emergency media file skipped', [
                     'case_id'    => $case->id,
                     'case_uid'   => $case->case_uid,
                     'media_type' => $mediaType,
                     'error_code' => $file->getError(),
                     'error_msg'  => $file->getErrorMessage(),
-                    'php_ini'    => [
-                        'upload_max_filesize' => ini_get('upload_max_filesize'),
-                        'post_max_size'       => ini_get('post_max_size'),
-                        'max_file_uploads'    => ini_get('max_file_uploads'),
-                    ],
                 ]);
 
                 return;
             }
 
+            $fileSize = (int) $file->getSize();
+
+            if ($mediaType === 'photo') {
+                if (!$isPhoto($file)) {
+                    $debug['skipped_files'][] = [
+                        'reason'    => 'not_photo_file',
+                        'file_name' => $file->getClientOriginalName(),
+                        'mime'      => $file->getMimeType(),
+                    ];
+                    return;
+                }
+
+                if ($fileSize > 5 * 1024 * 1024) {
+                    $debug['skipped_files'][] = [
+                        'reason'    => 'photo_too_large',
+                        'file_name' => $file->getClientOriginalName(),
+                        'size'      => $fileSize,
+                    ];
+                    return;
+                }
+            }
+
+            if ($mediaType === 'video') {
+                if (!$isVideo($file)) {
+                    $debug['skipped_files'][] = [
+                        'reason'    => 'not_video_file',
+                        'file_name' => $file->getClientOriginalName(),
+                        'mime'      => $file->getMimeType(),
+                    ];
+                    return;
+                }
+
+                if ($fileSize > 50 * 1024 * 1024) {
+                    $debug['skipped_files'][] = [
+                        'reason'    => 'video_too_large',
+                        'file_name' => $file->getClientOriginalName(),
+                        'size'      => $fileSize,
+                    ];
+                    return;
+                }
+            }
+
             $folder = $mediaType === 'photo'
                 ? 'emergency-cases/photos'
                 : 'emergency-cases/videos';
+
+            Storage::disk('public')->makeDirectory($folder);
 
             $originalName = $file->getClientOriginalName();
 
@@ -466,62 +505,125 @@ class EmergencyCaseController extends Controller
 
             $path = $file->storeAs($folder, $storedFileName, 'public');
 
-            EmergencyCaseMedia::create([
+            if (!$path) {
+                $debug['skipped_files'][] = [
+                    'reason'    => 'storage_failed',
+                    'file_name' => $originalName,
+                ];
+                return;
+            }
+
+            $media = EmergencyCaseMedia::create([
                 'emergency_case_id' => $case->id,
                 'user_id'           => $userId,
                 'media_type'        => $mediaType,
                 'file_path'         => $path,
                 'file_name'         => $originalName,
-                'mime_type'         => $file->getClientMimeType(),
-                'file_size'         => $file->getSize(),
+                'mime_type'         => $file->getClientMimeType() ?: $file->getMimeType(),
+                'file_size'         => $fileSize,
             ]);
 
             $savedCount++;
 
-            Log::info('Emergency media file saved successfully', [
-                'case_id'    => $case->id,
-                'case_uid'   => $case->case_uid,
+            $debug['saved_files'][] = [
+                'id'         => $media->id,
                 'media_type' => $mediaType,
                 'file_path'  => $path,
                 'file_name'  => $originalName,
-                'mime_type'  => $file->getClientMimeType(),
-                'file_size'  => $file->getSize(),
+                'mime_type'  => $file->getClientMimeType() ?: $file->getMimeType(),
+                'file_size'  => $fileSize,
+                'file_url'   => asset('storage/' . $path),
+            ];
+
+            Log::info('Emergency media file saved successfully', [
+                'case_id'    => $case->id,
+                'case_uid'   => $case->case_uid,
+                'media_id'   => $media->id,
+                'media_type' => $mediaType,
+                'file_path'  => $path,
+                'file_name'  => $originalName,
+                'mime_type'  => $file->getClientMimeType() ?: $file->getMimeType(),
+                'file_size'  => $fileSize,
             ]);
         };
 
         /*
         |--------------------------------------------------------------------------
-        | Save Photos
+        | Method 1: Standard expected fields
         |--------------------------------------------------------------------------
         */
-        $photos = $normalizeFiles($request->file('photos', []));
+        $photoFiles = [];
+        $videoFiles = [];
 
-        foreach ($photos as $photo) {
-            if ($photo instanceof UploadedFile) {
-                $saveFile($photo, 'photo');
+        foreach (['photos', 'photos[]', 'photo', 'image', 'images', 'media_photos'] as $key) {
+            if ($request->file($key)) {
+                $photoFiles = array_merge($photoFiles, $normalizeFiles($request->file($key)));
+            }
+        }
+
+        foreach (['videos', 'videos[]', 'video', 'media_videos'] as $key) {
+            if ($request->file($key)) {
+                $videoFiles = array_merge($videoFiles, $normalizeFiles($request->file($key)));
             }
         }
 
         /*
         |--------------------------------------------------------------------------
-        | Save Videos
+        | Method 2: Fallback from allFiles()
         |--------------------------------------------------------------------------
         */
-        $videos = $normalizeFiles($request->file('videos', []));
+        if (empty($photoFiles) && empty($videoFiles)) {
+            foreach ($allFiles as $fieldKey => $files) {
+                $flatFiles = $normalizeFiles($files);
+                $fieldKeyLower = strtolower((string) $fieldKey);
 
-        foreach ($videos as $video) {
+                foreach ($flatFiles as $file) {
+                    if (!$file instanceof UploadedFile) {
+                        continue;
+                    }
+
+                    if (str_contains($fieldKeyLower, 'photo') || str_contains($fieldKeyLower, 'image')) {
+                        $photoFiles[] = $file;
+                    } elseif (str_contains($fieldKeyLower, 'video')) {
+                        $videoFiles[] = $file;
+                    } else {
+                        if ($isPhoto($file)) {
+                            $photoFiles[] = $file;
+                        } elseif ($isVideo($file)) {
+                            $videoFiles[] = $file;
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach ($photoFiles as $photo) {
+            if ($photo instanceof UploadedFile) {
+                $saveFile($photo, 'photo');
+            }
+        }
+
+        foreach ($videoFiles as $video) {
             if ($video instanceof UploadedFile) {
                 $saveFile($video, 'video');
             }
         }
 
+        $debug['final_photo_count_received'] = count($photoFiles);
+        $debug['final_video_count_received'] = count($videoFiles);
+        $debug['final_saved_count'] = $savedCount;
+
         Log::info('Emergency media upload completed', [
             'case_id'     => $case->id,
             'case_uid'    => $case->case_uid,
             'saved_count' => $savedCount,
+            'debug'       => $debug,
         ]);
 
-        return $savedCount;
+        return [
+            'saved_count' => $savedCount,
+            'debug'       => $debug,
+        ];
     }
 
     public function show($id)
