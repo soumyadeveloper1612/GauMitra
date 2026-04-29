@@ -39,17 +39,23 @@ class User extends Authenticatable
     {
         return $this->hasMany(LoginOtp::class);
     }
-
+        
     public function addresses()
     {
         return $this->hasMany(UserAddress::class, 'user_id')
-            ->where('status', '!=', 'deleted');
+            ->where(function ($q) {
+                $q->whereNull('status')
+                ->orWhere('status', '!=', 'deleted');
+            });
     }
 
     public function latestAddress()
     {
         return $this->hasOne(UserAddress::class, 'user_id')
-            ->where('status', '!=', 'deleted')
+            ->where(function ($q) {
+                $q->whereNull('status')
+                ->orWhere('status', '!=', 'deleted');
+            })
             ->latestOfMany();
     }
 

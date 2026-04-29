@@ -4,10 +4,10 @@ namespace App\Services;
 
 use App\Models\DeviceToken;
 use App\Models\EmergencyCase;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use App\Models\User;
 
 class EmergencyCaseAlertService
 {
@@ -38,7 +38,7 @@ class EmergencyCaseAlertService
         return $this->pushService->sendToTokens(
             tokens: $tokens,
             title: 'Nearby Gau Rescue Alert',
-            body: 'A low severity case has been reported near ' . ($case->area_name ?: $case->city) . '. Please check if you can help.',
+            body: 'A low severity case has been reported near ' . ($case->area_name ?: $case->city ?: 'your area') . '. Please check if you can help.',
             data: $this->casePayload($case, 'area'),
             imageUrl: null,
             sound: 'gau_alert_low',
@@ -79,17 +79,20 @@ class EmergencyCaseAlertService
     private function getTokensByAddressScope(EmergencyCase $case, string $scope): array
     {
         try {
-            return DeviceToken::query()
+            $tokens = DeviceToken::query()
                 ->active()
                 ->withFcmToken()
                 ->whereHas('user', function (Builder $userQuery) use ($case, $scope) {
                     $userQuery
                         ->where('status', 'active')
+
+                        // Reporter already receives confirmation notification.
                         ->when($case->reporter_id, function ($q) use ($case) {
                             $q->where('id', '!=', $case->reporter_id);
                         })
+
                         ->whereHas('addresses', function (Builder $addressQuery) use ($case, $scope) {
-                            $addressQuery->where('status', '!=', 'deleted');
+                            $this->notDeletedAddress($addressQuery);
 
                             if ($scope === 'area') {
                                 $this->applyAreaFilter($addressQuery, $case);
@@ -105,88 +108,152 @@ class EmergencyCaseAlertService
                 ->unique()
                 ->values()
                 ->toArray();
+
+            Log::info('Emergency severity alert tokens fetched', [
+                'case_id'     => $case->id,
+                'case_uid'    => $case->case_uid,
+                'reporter_id' => $case->reporter_id,
+                'scope'       => $scope,
+                'severity'    => $case->severity,
+                'token_count' => count($tokens),
+                'area_name'   => $case->area_name,
+                'city'        => $case->city,
+                'district'    => $case->district,
+                'pincode'     => $case->pincode,
+                'latitude'    => $case->latitude,
+                'longitude'   => $case->longitude,
+            ]);
+
+            return $tokens;
         } catch (\Throwable $e) {
             Log::error('Severity wise token fetch failed', [
                 'case_id' => $case->id,
                 'scope'   => $scope,
                 'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
             ]);
 
             return [];
         }
     }
 
+    private function notDeletedAddress(Builder $query): void
+    {
+        $query->where(function ($q) {
+            $q->whereNull('status')
+              ->orWhere('status', '!=', 'deleted');
+        });
+    }
+
     private function applyAreaFilter(Builder $query, EmergencyCase $case): void
     {
         $query->where(function ($q) use ($case) {
-            if (!empty($case->area_name)) {
-                $q->orWhereRaw('LOWER(TRIM(area_name)) = ?', [
-                    Str::lower(trim($case->area_name)),
-                ]);
-            }
+            $this->orWhereNormalizedEquals($q, 'area_name', $case->area_name);
 
             if (!empty($case->pincode)) {
                 $q->orWhere('pincode', $case->pincode);
             }
 
-            if (!empty($case->city)) {
-                $q->orWhereRaw('LOWER(TRIM(city)) = ?', [
-                    Str::lower(trim($case->city)),
-                ]);
-            }
-        });
+            // Fallback: exact same city.
+            $this->orWhereNormalizedEquals($q, 'city', $case->city);
 
-        if (!empty($case->district)) {
-            $query->whereRaw('LOWER(TRIM(district)) = ?', [
-                Str::lower(trim($case->district)),
-            ]);
-        }
+            // Best fallback: same lat/lng area within 20 KM.
+            $this->orWhereWithinKm($q, $case, 20);
+        });
     }
 
     private function applyCityFilter(Builder $query, EmergencyCase $case): void
     {
-        if (!empty($case->city)) {
-            $query->whereRaw('LOWER(TRIM(city)) = ?', [
-                Str::lower(trim($case->city)),
-            ]);
-        }
+        $query->where(function ($q) use ($case) {
+            $this->orWhereNormalizedEquals($q, 'city', $case->city);
 
-        if (!empty($case->district)) {
-            $query->whereRaw('LOWER(TRIM(district)) = ?', [
-                Str::lower(trim($case->district)),
-            ]);
-        }
+            if (!empty($case->pincode)) {
+                $q->orWhere('pincode', $case->pincode);
+            }
+
+            // Medium severity fallback: users within 35 KM.
+            $this->orWhereWithinKm($q, $case, 35);
+        });
     }
 
     private function applyDistrictFilter(Builder $query, EmergencyCase $case): void
     {
-        if (!empty($case->district)) {
-            $query->whereRaw('LOWER(TRIM(district)) = ?', [
-                Str::lower(trim($case->district)),
-            ]);
+        $query->where(function ($q) use ($case) {
+            $this->orWhereNormalizedEquals($q, 'district', $case->district);
+
+            // Fallback if district value is different or missing.
+            $this->orWhereNormalizedEquals($q, 'city', $case->city);
+
+            // High severity fallback: users within 75 KM.
+            $this->orWhereWithinKm($q, $case, 75);
+        });
+    }
+
+    private function orWhereNormalizedEquals($query, string $column, ?string $value): void
+    {
+        $value = $this->cleanText($value);
+
+        if ($value === null) {
             return;
         }
 
-        if (!empty($case->city)) {
-            $query->whereRaw('LOWER(TRIM(city)) = ?', [
-                Str::lower(trim($case->city)),
-            ]);
+        $query->orWhereRaw("LOWER(TRIM($column)) = ?", [$value]);
+    }
+
+    private function orWhereWithinKm($query, EmergencyCase $case, float $radiusKm): void
+    {
+        if ($case->latitude === null || $case->longitude === null) {
+            return;
         }
+
+        $lat = (float) $case->latitude;
+        $lng = (float) $case->longitude;
+
+        if ($lat == 0.0 && $lng == 0.0) {
+            return;
+        }
+
+        $query->orWhere(function ($distanceQuery) use ($lat, $lng, $radiusKm) {
+            $distanceQuery
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->whereRaw(
+                    '(6371 * ACOS(LEAST(1, GREATEST(-1,
+                        COS(RADIANS(?)) *
+                        COS(RADIANS(latitude)) *
+                        COS(RADIANS(longitude) - RADIANS(?)) +
+                        SIN(RADIANS(?)) *
+                        SIN(RADIANS(latitude))
+                    )))) <= ?',
+                    [$lat, $lng, $lat, $radiusKm]
+                );
+        });
+    }
+
+    private function cleanText(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        return Str::lower($value);
     }
 
     private function casePayload(EmergencyCase $case, string $alertScope): array
     {
         return [
             'type'        => 'emergency_case_alert',
-            'case_id'     => $case->id,
-            'case_uid'    => $case->case_uid,
-            'status'      => $case->status,
-            'case_type'   => $case->case_type,
-            'severity'    => $case->severity,
-            'alert_scope' => $alertScope,
+            'case_id'     => (string) $case->id,
+            'case_uid'    => (string) $case->case_uid,
+            'status'      => (string) $case->status,
+            'case_type'   => (string) $case->case_type,
+            'severity'    => (string) $case->severity,
+            'alert_scope' => (string) $alertScope,
             'screen'      => 'EmergencyCaseDetails',
-            'latitude'    => $case->latitude,
-            'longitude'   => $case->longitude,
+            'latitude'    => (string) ($case->latitude ?? ''),
+            'longitude'   => (string) ($case->longitude ?? ''),
         ];
     }
 
@@ -240,19 +307,18 @@ class EmergencyCaseAlertService
     private function acceptedCasePayload(EmergencyCase $case, ?User $acceptedByUser, string $alertScope): array
     {
         return [
-            'type'                   => 'emergency_case_accepted_alert',
-            'case_id'                => (string) $case->id,
-            'case_uid'               => (string) $case->case_uid,
-            'status'                 => (string) $case->status,
-            'case_type'              => (string) $case->case_type,
-            'severity'               => (string) $case->severity,
-            'alert_scope'            => (string) $alertScope,
-            'accepted_by_user_id'    => (string) ($acceptedByUser?->id ?? ''),
-            'accepted_by_user_name'  => (string) ($acceptedByUser?->name ?? ''),
-            'screen'                 => 'EmergencyCaseDetails',
-            'latitude'               => (string) ($case->latitude ?? ''),
-            'longitude'              => (string) ($case->longitude ?? ''),
+            'type'                  => 'emergency_case_accepted_alert',
+            'case_id'               => (string) $case->id,
+            'case_uid'              => (string) $case->case_uid,
+            'status'                => (string) $case->status,
+            'case_type'             => (string) $case->case_type,
+            'severity'              => (string) $case->severity,
+            'alert_scope'           => (string) $alertScope,
+            'accepted_by_user_id'   => (string) ($acceptedByUser?->id ?? ''),
+            'accepted_by_user_name' => (string) ($acceptedByUser?->name ?? ''),
+            'screen'                => 'EmergencyCaseDetails',
+            'latitude'              => (string) ($case->latitude ?? ''),
+            'longitude'             => (string) ($case->longitude ?? ''),
         ];
     }
-
 }

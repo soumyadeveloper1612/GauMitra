@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class DeviceToken extends Model
 {
@@ -34,7 +34,7 @@ class DeviceToken extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where('is_active', 1);
     }
 
     public function scopeWithFcmToken($query)
