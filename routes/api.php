@@ -11,10 +11,12 @@ use App\Http\Controllers\Api\MasterDataController;
     Route::post('/send-otp', [AuthController::class, 'sendOtp']);
     Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 
-    Route::get('/report-types', [MasterDataController::class, 'reportTypes']);
-    Route::get('/manage-conditions', [MasterDataController::class, 'cowConditions']);
-    Route::get('/report-options', [MasterDataController::class, 'reportOptions']);
-    Route::get('/animal-types', [MasterDataController::class, 'animalTypes']);
+    Route::get('/manage-animal-types', [MasterDataController::class, 'animalTypes']);
+    Route::get('/manage-report-types', [MasterDataController::class, 'reportTypes']);
+    Route::get('/manage-conditions', [MasterDataController::class, 'animalConditions']);
+    Route::get('/emergency-case-options', [MasterDataController::class, 'emergencyCaseOptions']);
+
+    
     Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
