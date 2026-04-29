@@ -16,9 +16,18 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use App\Services\FirebasePushService;
+use App\Services\EmergencyCaseAlertService;
 
 class EmergencyCaseController extends Controller
 {
+
+    public function __construct(
+        protected FirebasePushService $pushService,
+        protected EmergencyCaseAlertService $caseAlertService
+    ) {
+    }
+
     public function index(Request $request)
     {
         $query = EmergencyCase::with([
@@ -279,19 +288,105 @@ class EmergencyCaseController extends Controller
                 'animalType:id,name,slug,icon_class,color_code',
                 'reportType:id,name,slug,icon_class,color_code',
                 'animalCondition:id,name,slug,severity_level,icon_class,color_code',
+                'reporter:id,name,mobile',
                 'media',
             ]);
 
+            /*
+            |--------------------------------------------------------------------------
+            | Reporter Confirmation Notification
+            |--------------------------------------------------------------------------
+            */
+
+            $pushResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Reporter notification not sent',
+            ];
+
+            try {
+                $case->loadMissing('reporter');
+
+                if ($case->reporter) {
+                    $pushResult = $this->pushService->sendToUser(
+                        user: $case->reporter,
+                        title: 'Emergency Case Submitted',
+                        body: 'Your emergency report ' . $case->case_uid . ' has been submitted successfully.',
+                        data: [
+                            'type'      => 'emergency_case_created',
+                            'case_id'   => (string) $case->id,
+                            'case_uid'  => (string) $case->case_uid,
+                            'status'    => (string) $case->status,
+                            'case_type' => (string) $case->case_type,
+                            'severity'  => (string) $case->severity,
+                            'screen'    => 'EmergencyCaseDetails',
+                        ],
+                        imageUrl: null,
+                        platform: null,
+                        sound: 'default',
+                        androidChannelId: 'default'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::error('Reporter Firebase notification failed', [
+                    'case_id' => $case->id,
+                    'user_id' => $case->reporter_id,
+                    'error'   => $e->getMessage(),
+                ]);
+
+                $pushResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Severity Wise Nearby Alert Notification
+            |--------------------------------------------------------------------------
+            */
+
+            $severityAlertResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Severity alert not sent',
+            ];
+
+            try {
+                $severityAlertResult = $this->caseAlertService->sendSeverityWiseAlert($case);
+            } catch (\Throwable $e) {
+                Log::error('Severity wise emergency alert failed', [
+                    'case_id'  => $case->id,
+                    'severity' => $case->severity,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                $severityAlertResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
+            }
+
             return response()->json([
-                'status'  => true,
-                'message' => 'Emergency case reported successfully.',
-                'data'    => $case,
+                'status'                => true,
+                'message'               => 'Emergency case reported successfully.',
+                'data'                  => $case,
+                'reporter_push_result'  => $pushResult,
+                'severity_alert_result' => $severityAlertResult,
+                'alerted_users'         => $severityAlertResult['success_count'] ?? 0,
             ], 201);
 
         } catch (\Throwable $e) {
             DB::rollBack();
 
             Log::error('Emergency case store failed', [
+                'user_id' => auth('sanctum')->id(),
                 'message' => $e->getMessage(),
                 'file'    => $e->getFile(),
                 'line'    => $e->getLine(),
@@ -301,6 +396,7 @@ class EmergencyCaseController extends Controller
                 'status'  => false,
                 'message' => 'Server error. Emergency case could not be saved.',
                 'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
             ], 500);
         }
     }

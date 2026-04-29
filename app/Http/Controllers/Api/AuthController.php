@@ -222,20 +222,22 @@ class AuthController extends Controller
          * Main fix:
          * fcm_token will now be saved.
          */
-        $deviceToken = DeviceToken::updateOrCreate(
-            [
-                'user_id'   => $user->id,
-                'device_id' => $deviceId,
-            ],
-            [
-                'platform'     => $platform,
-                'fcm_token'    => $fcmToken,
-                'is_active'    => true,
-                'last_used_at' => now(),
-                'ip_address'   => $request->ip(),
-                'user_agent'   => $request->userAgent(),
-            ]
-        );
+        if ($request->filled('platform') && $request->filled('device_id')) {
+            DeviceToken::updateOrCreate(
+                [
+                    'user_id'   => $user->id,
+                    'platform'  => $request->platform,
+                    'device_id' => $request->device_id,
+                ],
+                [
+                    'fcm_token'    => $request->fcm_token,
+                    'is_active'    => true,
+                    'last_used_at' => now(),
+                    'ip_address'   => $request->ip(),
+                    'user_agent'   => $request->userAgent(),
+                ]
+            );
+        }
 
         $token = $user->createToken('user-auth-token')->plainTextToken;
 
@@ -289,4 +291,5 @@ class AuthController extends Controller
             'message' => 'Logout successful',
         ]);
     }
+
 }

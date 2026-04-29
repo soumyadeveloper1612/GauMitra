@@ -22,38 +22,34 @@ class FirebasePushService
         string $body,
         array $data = [],
         ?string $imageUrl = null,
-        ?string $platform = null
+        ?string $platform = null,
+        string $sound = 'default',
+        string $androidChannelId = 'default'
     ): array {
         $query = DeviceToken::query()
             ->where('user_id', $user->id)
             ->active()
-            ->withNotificationToken();
+            ->withFcmToken();
 
         if (!empty($platform)) {
             $query->platform($platform);
         }
 
-        $latestDevice = $query
-            ->orderByDesc('last_used_at')
-            ->orderByDesc('id')
-            ->first();
-
-        if (!$latestDevice || empty($latestDevice->notification_token)) {
-            return [
-                'success_count' => 0,
-                'failure_count' => 0,
-                'results'       => [],
-                'message'       => 'No active Firebase token found in device_tokens table.',
-                'first_error'   => null,
-            ];
-        }
+        $tokens = $query
+            ->pluck('fcm_token')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
 
         return $this->sendToTokens(
-            tokens: [$latestDevice->notification_token],
+            tokens: $tokens,
             title: $title,
             body: $body,
             data: $data,
-            imageUrl: $imageUrl
+            imageUrl: $imageUrl,
+            sound: $sound,
+            androidChannelId: $androidChannelId
         );
     }
 
@@ -62,7 +58,9 @@ class FirebasePushService
         string $title,
         string $body,
         array $data = [],
-        ?string $imageUrl = null
+        ?string $imageUrl = null,
+        string $sound = 'default',
+        string $androidChannelId = 'default'
     ): array {
         $tokens = array_values(array_unique(array_filter($tokens)));
 
@@ -76,21 +74,19 @@ class FirebasePushService
             ];
         }
 
-        $stringData = [];
-
-        foreach ($data as $key => $value) {
-            if ($value === null) {
-                $stringData[$key] = '';
-            } elseif (is_scalar($value)) {
-                $stringData[$key] = (string) $value;
-            } else {
-                $stringData[$key] = json_encode($value);
-            }
-        }
+        $stringData = $this->stringifyData($data);
 
         if (!empty($imageUrl)) {
             $stringData['image_url'] = $imageUrl;
         }
+
+        $androidSound = $sound === 'default'
+            ? 'default'
+            : pathinfo($sound, PATHINFO_FILENAME);
+
+        $iosSound = $sound === 'default'
+            ? 'default'
+            : $this->iosSoundName($sound);
 
         $successCount = 0;
         $failureCount = 0;
@@ -110,19 +106,42 @@ class FirebasePushService
 
                 $messageArray = [
                     'token'        => $token,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Notification Payload
+                    |--------------------------------------------------------------------------
+                    | This shows notification automatically when app is in background.
+                    */
                     'notification' => $notification,
-                    'data'         => $stringData,
-                    'android'      => [
-                        'priority'     => 'high',
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Data Payload
+                    |--------------------------------------------------------------------------
+                    | App can use this for screen navigation and custom handling.
+                    */
+                    'data' => array_merge($stringData, [
+                        'sound'              => $androidSound,
+                        'ios_sound'          => $iosSound,
+                        'android_channel_id' => $androidChannelId,
+                    ]),
+
+                    'android' => [
+                        'priority' => 'high',
                         'notification' => [
-                            'sound'      => 'default',
-                            'channel_id' => 'default',
+                            'sound'      => $androidSound,
+                            'channel_id' => $androidChannelId,
                         ],
                     ],
+
                     'apns' => [
+                        'headers' => [
+                            'apns-priority' => '10',
+                        ],
                         'payload' => [
                             'aps' => [
-                                'sound' => 'default',
+                                'sound' => $iosSound,
                             ],
                         ],
                     ],
@@ -141,10 +160,7 @@ class FirebasePushService
 
                 $successCount++;
 
-                DeviceToken::where(function ($q) use ($token) {
-                    $q->where('fcm_token', $token)
-                        ->orWhere('device_id', $token);
-                })->update([
+                DeviceToken::where('fcm_token', $token)->update([
                     'is_active'    => true,
                     'last_used_at' => now(),
                 ]);
@@ -152,7 +168,7 @@ class FirebasePushService
                 $results[] = [
                     'token'   => $token,
                     'status'  => 'sent',
-                    'message' => 'Notification sent successfully',
+                    'message' => 'Notification sent successfully.',
                 ];
             } catch (Throwable $e) {
                 $failureCount++;
@@ -169,10 +185,7 @@ class FirebasePushService
                 ]);
 
                 if ($this->isInvalidFirebaseTokenError($errorMessage)) {
-                    DeviceToken::where(function ($q) use ($token) {
-                        $q->where('fcm_token', $token)
-                            ->orWhere('device_id', $token);
-                    })->update([
+                    DeviceToken::where('fcm_token', $token)->update([
                         'is_active' => false,
                     ]);
                 }
@@ -194,6 +207,32 @@ class FirebasePushService
                 : ($firstError ?: 'Firebase notification failed.'),
             'first_error'   => $firstError,
         ];
+    }
+
+    private function stringifyData(array $data): array
+    {
+        $stringData = [];
+
+        foreach ($data as $key => $value) {
+            if ($value === null) {
+                $stringData[$key] = '';
+            } elseif (is_scalar($value)) {
+                $stringData[$key] = (string) $value;
+            } else {
+                $stringData[$key] = json_encode($value);
+            }
+        }
+
+        return $stringData;
+    }
+
+    private function iosSoundName(string $sound): string
+    {
+        if (str_contains($sound, '.')) {
+            return $sound;
+        }
+
+        return $sound . '.caf';
     }
 
     private function isInvalidFirebaseTokenError(string $message): bool
