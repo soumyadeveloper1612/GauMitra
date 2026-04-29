@@ -8,98 +8,105 @@ use App\Models\LoginOtp;
 use App\Models\User;
 use App\Models\UserAddress;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
     public function sendOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'mobile' => 'required|digits:10',
+            'mobile'    => 'required|digits:10',
+            'platform'  => 'nullable|string|in:android,ios,web',
+            'device_id' => 'nullable|string|max:191',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Validation failed',
+                'message' => 'Validation failed.',
                 'errors'  => $validator->errors(),
             ], 422);
         }
 
-        $mobile = $request->mobile;
+        try {
+            $mobile   = $request->mobile;
+            $platform = $request->platform ?: 'android';
+            $deviceId = $request->device_id ?: 'unknown-device';
 
-        $existingUser = User::where('mobile', $mobile)->first();
+            $existingUser = User::where('mobile', $mobile)->first();
 
-        if ($existingUser && $existingUser->status !== 'active') {
+            if ($existingUser && $existingUser->status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User exists but is inactive.',
+                    'data'    => [
+                        'mobile'      => $mobile,
+                        'user_exists' => true,
+                        'is_new_user' => false,
+                    ],
+                ], 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Testing OTP
+            |--------------------------------------------------------------------------
+            | For development/testing, OTP is last 4 digits of mobile.
+            */
+            $otp = substr($mobile, -4);
+
+            DB::transaction(function () use ($mobile, $platform, $deviceId, $existingUser, $otp, $request) {
+                LoginOtp::where('mobile', $mobile)
+                    ->where('is_used', false)
+                    ->whereNull('verified_at')
+                    ->update([
+                        'is_used' => true,
+                    ]);
+
+                LoginOtp::create([
+                    'user_id'     => $existingUser?->id,
+                    'mobile'      => $mobile,
+                    'platform'    => $platform,
+                    'device_id'   => $deviceId,
+                    'purpose'     => 'login',
+                    'otp_hash'    => Hash::make($otp),
+                    'expires_at'  => now()->addMinutes(10),
+                    'verified_at' => null,
+                    'is_used'     => false,
+                    'attempts'    => 0,
+                    'ip_address'  => $request->ip(),
+                    'user_agent'  => $request->userAgent(),
+                ]);
+            });
+
             return response()->json([
-                'status'  => false,
-                'message' => 'User exists but is inactive',
+                'status'  => true,
+                'message' => 'OTP sent successfully.',
                 'data'    => [
                     'mobile'      => $mobile,
-                    'user_exists' => true,
-                    'is_new_user' => false,
+                    'user_exists' => (bool) $existingUser,
+                    'is_new_user' => !$existingUser,
+                    'otp'         => $otp,
                 ],
-            ], 403);
-        }
-
-        $isNewUser = !$existingUser;
-
-        /*
-        |--------------------------------------------------------------------------
-        | Testing OTP: Last 4 Digits Of Mobile
-        |--------------------------------------------------------------------------
-        */
-
-        $otp = substr($mobile, -4);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Mark old unused OTP as used
-        |--------------------------------------------------------------------------
-        */
-
-        LoginOtp::where('mobile', $mobile)
-            ->where('is_used', false)
-            ->whereNull('verified_at')
-            ->update([
-                'is_used' => true,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('SEND OTP ERROR', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
             ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | Create fresh OTP row
-        |--------------------------------------------------------------------------
-        */
-
-        LoginOtp::create([
-            'user_id'     => $existingUser?->id,
-            'mobile'      => $mobile,
-            'otp_hash'    => Hash::make($otp),
-            'expires_at'  => now()->addMinutes(10),
-            'verified_at' => null,
-            'is_used'     => false,
-            'attempts'    => 0,
-            'ip_address'  => $request->ip(),
-            'user_agent'  => $request->userAgent(),
-        ]);
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'OTP sent successfully',
-            'data'    => [
-                'mobile'      => $mobile,
-                'user_exists' => (bool) $existingUser,
-                'is_new_user' => $isNewUser,
-
-                /*
-                |--------------------------------------------------------------------------
-                | Testing Purpose Only
-                |--------------------------------------------------------------------------
-                */
-                'otp'         => $otp,
-            ],
-        ]);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while sending OTP.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     public function verifyOtp(Request $request)
@@ -109,284 +116,225 @@ class AuthController extends Controller
             'otp'       => 'required|digits:4',
             'name'      => 'nullable|string|max:255',
             'platform'  => 'required|string|in:android,ios,web',
-
-            /*
-            |--------------------------------------------------------------------------
-            | device_id should be real device unique id
-            |--------------------------------------------------------------------------
-            */
-            'device_id' => 'required|string|max:1000',
-
-            /*
-            |--------------------------------------------------------------------------
-            | fcm_token should be real Firebase FCM token
-            |--------------------------------------------------------------------------
-            */
-            'fcm_token' => 'nullable|string|max:3000',
+            'device_id' => 'required|string|max:191',
+            'fcm_token' => 'nullable|string|max:5000',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Validation failed',
+                'message' => 'Validation failed.',
                 'errors'  => $validator->errors(),
             ], 422);
         }
 
-        $mobile   = $request->mobile;
-        $otp      = $request->otp;
-        $platform = $request->platform;
+        try {
+            $response = DB::transaction(function () use ($request) {
+                $mobile   = $request->mobile;
+                $otp      = $request->otp;
+                $platform = $request->platform;
+                $deviceId = $request->device_id;
+                $fcmToken = $request->filled('fcm_token') ? $request->fcm_token : null;
 
-        /*
-        |--------------------------------------------------------------------------
-        | Testing OTP: Last 4 Digits
-        |--------------------------------------------------------------------------
-        */
+                $user = User::where('mobile', $mobile)->first();
 
-        $testingOtp = substr($mobile, -4);
+                if ($user && $user->status !== 'active') {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'User exists but is inactive.',
+                        'data'    => [
+                            'mobile'      => $mobile,
+                            'user_exists' => true,
+                            'is_new_user' => false,
+                        ],
+                    ], 403);
+                }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Token Handling
-        |--------------------------------------------------------------------------
-        | Best practice:
-        | device_id = unique phone/device id
-        | fcm_token = Firebase token
-        |
-        | For your current Postman/app testing:
-        | if fcm_token is missing, fallback to device_id.
-        |--------------------------------------------------------------------------
-        */
+                $loginOtp = LoginOtp::where('mobile', $mobile)
+                    ->where('is_used', false)
+                    ->whereNull('verified_at')
+                    ->latest('id')
+                    ->first();
 
-        $deviceId = $request->device_id;
+                if (!$loginOtp) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'OTP not found or already used. Please send OTP again.',
+                    ], 422);
+                }
 
-        $fcmToken = $request->filled('fcm_token')
-            ? $request->fcm_token
-            : $request->device_id;
+                if ($loginOtp->expires_at && now()->greaterThan($loginOtp->expires_at)) {
+                    $loginOtp->update([
+                        'is_used' => true,
+                    ]);
 
-        $user = User::where('mobile', $mobile)->first();
-        $isNewUser = false;
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'OTP expired. Please send OTP again.',
+                    ], 422);
+                }
 
-        if ($user && $user->status !== 'active') {
-            return response()->json([
-                'status'  => false,
-                'message' => 'User exists but is inactive',
-                'data'    => [
-                    'mobile'      => $mobile,
-                    'user_exists' => true,
-                    'is_new_user' => false,
-                ],
-            ], 403);
-        }
+                if (!Hash::check($otp, $loginOtp->otp_hash)) {
+                    $loginOtp->increment('attempts');
 
-        /*
-        |--------------------------------------------------------------------------
-        | Find Latest Active OTP
-        |--------------------------------------------------------------------------
-        */
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Invalid OTP.',
+                    ], 422);
+                }
 
-        $loginOtp = LoginOtp::where('mobile', $mobile)
-            ->where('is_used', false)
-            ->whereNull('verified_at')
-            ->latest('id')
-            ->first();
+                $isNewUser = false;
 
-        /*
-        |--------------------------------------------------------------------------
-        | If OTP Row Not Found
-        |--------------------------------------------------------------------------
-        | Because you are using mobile last 4 digit OTP for testing,
-        | allow verification if OTP matches mobile last 4 digits.
-        |--------------------------------------------------------------------------
-        */
+                if (!$user) {
+                    $user = User::create([
+                        'name'               => $request->filled('name') ? $request->name : 'User',
+                        'mobile'             => $mobile,
+                        'password'           => Hash::make(Str::random(32)),
+                        'status'             => 'active',
+                        'mobile_verified_at' => now(),
+                        'last_login_at'      => now(),
+                    ]);
 
-        if (!$loginOtp) {
-            if ($otp !== $testingOtp) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'OTP not found or already used',
-                ], 422);
-            }
+                    $isNewUser = true;
+                    $message = 'New user registered and login successful.';
+                } else {
+                    $updateData = [
+                        'mobile_verified_at' => now(),
+                        'last_login_at'      => now(),
+                    ];
 
-            $loginOtp = LoginOtp::create([
-                'user_id'     => $user?->id,
-                'mobile'      => $mobile,
-                'otp_hash'    => Hash::make($testingOtp),
-                'expires_at'  => now()->addMinutes(10),
-                'verified_at' => null,
-                'is_used'     => false,
-                'attempts'    => 0,
-                'ip_address'  => $request->ip(),
-                'user_agent'  => $request->userAgent(),
-            ]);
-        }
+                    if ($request->filled('name') && empty($user->name)) {
+                        $updateData['name'] = $request->name;
+                    }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Expiry Check
-        |--------------------------------------------------------------------------
-        */
+                    $user->update($updateData);
 
-        if ($loginOtp->expires_at && now()->greaterThan($loginOtp->expires_at)) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'OTP expired',
-            ], 422);
-        }
+                    $message = 'Login successful.';
+                }
 
-        /*
-        |--------------------------------------------------------------------------
-        | OTP Check
-        |--------------------------------------------------------------------------
-        */
-
-        if (!Hash::check($otp, $loginOtp->otp_hash)) {
-            $loginOtp->increment('attempts');
-
-            return response()->json([
-                'status'  => false,
-                'message' => 'Invalid OTP',
-            ], 422);
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Create Or Update User
-        |--------------------------------------------------------------------------
-        */
-
-        if (!$user) {
-            $user = User::create([
-                'name'               => $request->filled('name') ? $request->name : null,
-                'mobile'             => $mobile,
-                'status'             => 'active',
-                'mobile_verified_at' => now(),
-                'last_login_at'      => now(),
-            ]);
-
-            $isNewUser = true;
-            $message = 'New user registered and login successful';
-        } else {
-            $updateData = [
-                'mobile_verified_at' => now(),
-                'last_login_at'      => now(),
-            ];
-
-            if ($request->filled('name') && empty($user->name)) {
-                $updateData['name'] = $request->name;
-            }
-
-            $user->update($updateData);
-
-            $message = 'Login successful';
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Update Login OTP Row
-        |--------------------------------------------------------------------------
-        */
-
-        $loginOtp->update([
-            'user_id'     => $user->id,
-            'platform'    => $platform,
-            'device_id'   => $deviceId,
-            'verified_at' => now(),
-            'is_used'     => true,
-        ]);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Deactivate Same FCM Token From Other Users
-        |--------------------------------------------------------------------------
-        */
-
-        if (!empty($fcmToken)) {
-            DeviceToken::where('fcm_token', $fcmToken)
-                ->where('user_id', '!=', $user->id)
-                ->update([
-                    'is_active' => false,
+                $loginOtp->update([
+                    'user_id'     => $user->id,
+                    'platform'    => $platform,
+                    'device_id'   => $deviceId,
+                    'verified_at' => now(),
+                    'is_used'     => true,
                 ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Save device token
+                |--------------------------------------------------------------------------
+                | device_id and fcm_token are different.
+                | device_id = mobile device unique id
+                | fcm_token = Firebase push notification token
+                */
+                if (!empty($fcmToken)) {
+                    DeviceToken::where('fcm_token', $fcmToken)
+                        ->where('user_id', '!=', $user->id)
+                        ->update([
+                            'is_active' => 0,
+                        ]);
+                }
+
+                $deviceToken = DeviceToken::updateOrCreate(
+                    [
+                        'user_id'   => $user->id,
+                        'platform'  => $platform,
+                        'device_id' => $deviceId,
+                    ],
+                    [
+                        'fcm_token'    => $fcmToken,
+                        'is_active'    => 1,
+                        'last_used_at' => now(),
+                        'ip_address'   => $request->ip(),
+                        'user_agent'   => $request->userAgent(),
+                    ]
+                );
+
+                $token = $user->createToken('user-auth-token')->plainTextToken;
+
+                $addressQuery = UserAddress::where('user_id', $user->id);
+
+                if (Schema::hasColumn('user_addresses', 'status')) {
+                    $addressQuery->where('status', '!=', 'deleted');
+                }
+
+                $addressExists = $addressQuery->exists();
+
+                return response()->json([
+                    'status'  => true,
+                    'message' => $message,
+                    'data'    => [
+                        'token'          => $token,
+                        'user'           => $user->fresh(),
+                        'mobile'         => $mobile,
+                        'platform'       => $platform,
+                        'device_id'      => $deviceId,
+                        'fcm_token'      => $fcmToken,
+                        'device_token'   => $deviceToken,
+                        'user_exists'    => !$isNewUser,
+                        'is_new_user'    => $isNewUser,
+                        'address_exists' => $addressExists,
+                    ],
+                ]);
+            });
+
+            return $response;
+        } catch (\Throwable $e) {
+            Log::error('VERIFY OTP ERROR', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while verifying OTP.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Store / Update Device Token
-        |--------------------------------------------------------------------------
-        */
-
-        $deviceToken = DeviceToken::updateOrCreate(
-            [
-                'user_id'   => $user->id,
-                'platform'  => $platform,
-                'device_id' => $deviceId,
-            ],
-            [
-                'fcm_token'    => $fcmToken,
-                'is_active'    => true,
-                'last_used_at' => now(),
-                'ip_address'   => $request->ip(),
-                'user_agent'   => $request->userAgent(),
-            ]
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | Create Sanctum Token
-        |--------------------------------------------------------------------------
-        */
-
-        $token = $user->createToken('user-auth-token')->plainTextToken;
-
-        $addressExists = UserAddress::where('user_id', $user->id)
-            ->where('status', '!=', 'deleted')
-            ->exists();
-
-        return response()->json([
-            'status'  => true,
-            'message' => $message,
-            'data'    => [
-                'token'          => $token,
-                'user'           => $user->fresh(),
-                'mobile'         => $mobile,
-                'platform'       => $platform,
-                'device_id'      => $deviceId,
-                'fcm_token'      => $fcmToken,
-                'device_token'   => $deviceToken,
-                'user_exists'    => !$isNewUser,
-                'is_new_user'    => $isNewUser,
-                'address_exists' => $addressExists,
-            ],
-        ]);
     }
 
     public function logout(Request $request)
     {
-        $user = $request->user();
+        try {
+            $user = $request->user();
 
-        if ($user) {
-            $deviceId = $request->input('device_id');
-            $fcmToken = $request->input('fcm_token');
+            if ($user) {
+                $deviceId = $request->input('device_id');
+                $fcmToken = $request->input('fcm_token');
 
-            $query = DeviceToken::where('user_id', $user->id);
+                $query = DeviceToken::where('user_id', $user->id);
 
-            if (!empty($fcmToken)) {
-                $query->where('fcm_token', $fcmToken);
-            } elseif (!empty($deviceId)) {
-                $query->where('device_id', $deviceId);
+                if (!empty($fcmToken)) {
+                    $query->where('fcm_token', $fcmToken);
+                } elseif (!empty($deviceId)) {
+                    $query->where('device_id', $deviceId);
+                }
+
+                $query->update([
+                    'is_active' => 0,
+                ]);
+
+                $request->user()->currentAccessToken()?->delete();
             }
 
-            $query->update([
-                'is_active' => false,
+            return response()->json([
+                'status'  => true,
+                'message' => 'Logout successful.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('LOGOUT ERROR', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
             ]);
 
-            $request->user()->currentAccessToken()?->delete();
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while logout.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
         }
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'Logout successful',
-        ]);
     }
-
 }
