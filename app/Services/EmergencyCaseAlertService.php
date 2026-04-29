@@ -7,6 +7,7 @@ use App\Models\EmergencyCase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Models\User;
 
 class EmergencyCaseAlertService
 {
@@ -188,4 +189,70 @@ class EmergencyCaseAlertService
             'longitude'   => $case->longitude,
         ];
     }
+
+    public function sendCaseAcceptedSeverityWiseAlert(EmergencyCase $case, ?User $acceptedByUser = null): array
+    {
+        $severity = strtolower($case->severity ?? 'medium');
+
+        $responderName = $acceptedByUser?->name ?? 'A responder';
+
+        if (in_array($severity, ['high', 'critical'])) {
+            $tokens = $this->getTokensByAddressScope($case, 'district');
+
+            return $this->pushService->sendToTokens(
+                tokens: $tokens,
+                title: 'High Alert Case Accepted',
+                body: $responderName . ' accepted case ' . $case->case_uid . ' and is going to the spot.',
+                data: $this->acceptedCasePayload($case, $acceptedByUser, 'district'),
+                imageUrl: null,
+                sound: 'gau_alert_high',
+                androidChannelId: 'emergency_high_alerts'
+            );
+        }
+
+        if ($severity === 'medium') {
+            $tokens = $this->getTokensByAddressScope($case, 'city');
+
+            return $this->pushService->sendToTokens(
+                tokens: $tokens,
+                title: 'City Case Accepted',
+                body: $responderName . ' accepted case ' . $case->case_uid . ' and is going to the spot.',
+                data: $this->acceptedCasePayload($case, $acceptedByUser, 'city'),
+                imageUrl: null,
+                sound: 'gau_alert_medium',
+                androidChannelId: 'emergency_medium_alerts'
+            );
+        }
+
+        $tokens = $this->getTokensByAddressScope($case, 'area');
+
+        return $this->pushService->sendToTokens(
+            tokens: $tokens,
+            title: 'Nearby Case Accepted',
+            body: $responderName . ' accepted case ' . $case->case_uid . ' and is going to the spot.',
+            data: $this->acceptedCasePayload($case, $acceptedByUser, 'area'),
+            imageUrl: null,
+            sound: 'gau_alert_low',
+            androidChannelId: 'emergency_low_alerts'
+        );
+    }
+
+    private function acceptedCasePayload(EmergencyCase $case, ?User $acceptedByUser, string $alertScope): array
+    {
+        return [
+            'type'                   => 'emergency_case_accepted_alert',
+            'case_id'                => (string) $case->id,
+            'case_uid'               => (string) $case->case_uid,
+            'status'                 => (string) $case->status,
+            'case_type'              => (string) $case->case_type,
+            'severity'               => (string) $case->severity,
+            'alert_scope'            => (string) $alertScope,
+            'accepted_by_user_id'    => (string) ($acceptedByUser?->id ?? ''),
+            'accepted_by_user_name'  => (string) ($acceptedByUser?->name ?? ''),
+            'screen'                 => 'EmergencyCaseDetails',
+            'latitude'               => (string) ($case->latitude ?? ''),
+            'longitude'              => (string) ($case->longitude ?? ''),
+        ];
+    }
+
 }

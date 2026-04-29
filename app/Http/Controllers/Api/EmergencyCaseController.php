@@ -421,7 +421,7 @@ class EmergencyCaseController extends Controller
             'data'    => $case,
         ]);
     }
-    
+
     public function acceptReport(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
@@ -442,31 +442,65 @@ class EmergencyCaseController extends Controller
         $userId = auth('sanctum')->id();
 
         try {
+            /*
+            |--------------------------------------------------------------------------
+            | Accept Case Transaction
+            |--------------------------------------------------------------------------
+            */
+
             $case = DB::transaction(function () use ($request, $id, $userId) {
                 $case = EmergencyCase::where('id', $id)
                     ->lockForUpdate()
                     ->firstOrFail();
 
+                /*
+                |--------------------------------------------------------------------------
+                | Already Accepted By Same User
+                |--------------------------------------------------------------------------
+                */
+
                 if ($case->status === 'accepted' && (int) $case->current_handler_id === (int) $userId) {
                     return $case;
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | Already Accepted By Another User
+                |--------------------------------------------------------------------------
+                */
+
                 if ($case->status === 'accepted' && (int) $case->current_handler_id !== (int) $userId) {
-                    abort(response()->json([
-                        'status'  => false,
-                        'message' => 'This case has already been accepted by another responder.',
-                    ], 409));
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                        response()->json([
+                            'status'  => false,
+                            'message' => 'This case has already been accepted by another responder.',
+                        ], 409)
+                    );
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | Status Validation
+                |--------------------------------------------------------------------------
+                */
+
                 if (!in_array($case->status, ['reported', 'alerted', 'escalated'])) {
-                    abort(response()->json([
-                        'status'  => false,
-                        'message' => 'This case cannot be accepted now.',
-                    ], 422));
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                        response()->json([
+                            'status'  => false,
+                            'message' => 'This case cannot be accepted now.',
+                        ], 422)
+                    );
                 }
 
                 $oldStatus = $case->status;
                 $notes = $request->notes ?? $request->remarks ?? 'Case accepted.';
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create / Update Assignment
+                |--------------------------------------------------------------------------
+                */
 
                 $assignment = EmergencyCaseAssignment::updateOrCreate(
                     [
@@ -483,11 +517,23 @@ class EmergencyCaseController extends Controller
                     ]
                 );
 
+                /*
+                |--------------------------------------------------------------------------
+                | Update Emergency Case
+                |--------------------------------------------------------------------------
+                */
+
                 $case->update([
                     'current_handler_id' => $userId,
                     'status'             => 'accepted',
                     'accepted_at'        => now(),
                 ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Cancel Other Pending Assignments
+                |--------------------------------------------------------------------------
+                */
 
                 EmergencyCaseAssignment::where('emergency_case_id', $case->id)
                     ->where('user_id', '!=', $userId)
@@ -496,6 +542,12 @@ class EmergencyCaseController extends Controller
                         'status'       => 'cancelled',
                         'cancelled_at' => now(),
                     ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Case Log
+                |--------------------------------------------------------------------------
+                */
 
                 EmergencyCaseLog::create([
                     'emergency_case_id' => $case->id,
@@ -514,27 +566,137 @@ class EmergencyCaseController extends Controller
                 return $case;
             });
 
-            return response()->json([
-                'status'  => true,
-                'message' => 'Case accepted successfully.',
-                'data'    => $case->fresh([
-                    'animalType',
-                    'reportType',
-                    'animalCondition',
-                    'media',
-                    'assignments.user:id,name,mobile',
-                    'currentHandler:id,name,mobile',
-                ]),
+            /*
+            |--------------------------------------------------------------------------
+            | Reload Case With Relations
+            |--------------------------------------------------------------------------
+            */
+
+            $case = $case->fresh([
+                'animalType',
+                'reportType',
+                'animalCondition',
+                'media',
+                'assignments.user:id,name,mobile',
+                'currentHandler:id,name,mobile',
+                'reporter:id,name,mobile',
             ]);
-        } catch (\Throwable $e) {
-            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
-                throw $e;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Reporter Notification: Case Accepted
+            |--------------------------------------------------------------------------
+            */
+
+            $reporterPushResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Reporter notification not sent',
+            ];
+
+            try {
+                if ($case->reporter) {
+                    $responderName = $case->currentHandler?->name ?? 'A responder';
+
+                    $reporterPushResult = $this->pushService->sendToUser(
+                        user: $case->reporter,
+                        title: 'Emergency Case Accepted',
+                        body: $responderName . ' has accepted your emergency case ' . $case->case_uid . ' and is going to the spot.',
+                        data: [
+                            'type'                 => 'emergency_case_accepted',
+                            'case_id'              => (string) $case->id,
+                            'case_uid'             => (string) $case->case_uid,
+                            'status'               => (string) $case->status,
+                            'case_type'            => (string) $case->case_type,
+                            'severity'             => (string) $case->severity,
+                            'current_handler_id'   => (string) $case->current_handler_id,
+                            'current_handler_name' => (string) $responderName,
+                            'screen'               => 'EmergencyCaseDetails',
+                        ],
+                        imageUrl: null,
+                        platform: null,
+                        sound: 'default',
+                        androidChannelId: 'case_status_updates'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::error('Reporter accepted case Firebase notification failed', [
+                    'case_id' => $case->id,
+                    'user_id' => $case->reporter_id,
+                    'error'   => $e->getMessage(),
+                ]);
+
+                $reporterPushResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Severity Wise Location Alert: Case Accepted And Responder Going To Spot
+            |--------------------------------------------------------------------------
+            */
+
+            $severityAcceptedAlertResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Severity accepted alert not sent',
+            ];
+
+            try {
+                $severityAcceptedAlertResult = $this->caseAlertService
+                    ->sendCaseAcceptedSeverityWiseAlert($case, $case->currentHandler);
+            } catch (\Throwable $e) {
+                Log::error('Severity wise accepted case alert failed', [
+                    'case_id'  => $case->id,
+                    'severity' => $case->severity,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                $severityAcceptedAlertResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Final Response
+            |--------------------------------------------------------------------------
+            */
+
+            return response()->json([
+                'status'                         => true,
+                'message'                        => 'Case accepted successfully.',
+                'data'                           => $case,
+                'reporter_push_result'           => $reporterPushResult,
+                'severity_accepted_alert_result' => $severityAcceptedAlertResult,
+                'alerted_users'                  => $severityAcceptedAlertResult['success_count'] ?? 0,
+            ]);
+
+        } catch (\Illuminate\Http\Exceptions\HttpResponseException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('Accept report failed', [
+                'case_id' => $id,
+                'user_id' => $userId,
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ]);
 
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong while accepting the case.',
                 'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
             ], 500);
         }
     }
