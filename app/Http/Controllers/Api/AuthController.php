@@ -20,9 +20,7 @@ class AuthController extends Controller
     public function sendOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'mobile'    => 'required|digits:10',
-            'platform'  => 'nullable|string|in:android,ios,web',
-            'device_id' => 'nullable|string|max:191',
+            'mobile' => 'required|digits:10',
         ]);
 
         if ($validator->fails()) {
@@ -34,9 +32,7 @@ class AuthController extends Controller
         }
 
         try {
-            $mobile   = $request->mobile;
-            $platform = $request->platform ?: 'android';
-            $deviceId = $request->device_id ?: 'unknown-device';
+            $mobile = $request->mobile;
 
             $existingUser = User::where('mobile', $mobile)->first();
 
@@ -54,25 +50,30 @@ class AuthController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Testing OTP
+            | Development OTP
             |--------------------------------------------------------------------------
-            | For development/testing, OTP is last 4 digits of mobile.
+            | For testing: OTP is last 4 digits of mobile.
+            | Example: 7008515765 => 5765
             */
             $otp = substr($mobile, -4);
 
-            DB::transaction(function () use ($mobile, $platform, $deviceId, $existingUser, $otp, $request) {
-                LoginOtp::where('mobile', $mobile)
-                    ->where('is_used', false)
-                    ->whereNull('verified_at')
-                    ->update([
-                        'is_used' => true,
-                    ]);
+            DB::transaction(function () use ($mobile, $existingUser, $otp, $request) {
+                /*
+                |--------------------------------------------------------------------------
+                | OTP Logic
+                |--------------------------------------------------------------------------
+                | If this mobile already has login OTP row, update same row.
+                | If this mobile is new, insert new row.
+                */
+                $loginOtp = LoginOtp::where('mobile', $mobile)
+                    ->where('purpose', 'login')
+                    ->lockForUpdate()
+                    ->latest('id')
+                    ->first();
 
-                LoginOtp::create([
+                $payload = [
                     'user_id'     => $existingUser?->id,
                     'mobile'      => $mobile,
-                    'platform'    => $platform,
-                    'device_id'   => $deviceId,
                     'purpose'     => 'login',
                     'otp_hash'    => Hash::make($otp),
                     'expires_at'  => now()->addMinutes(10),
@@ -81,7 +82,13 @@ class AuthController extends Controller
                     'attempts'    => 0,
                     'ip_address'  => $request->ip(),
                     'user_agent'  => $request->userAgent(),
-                ]);
+                ];
+
+                if ($loginOtp) {
+                    $loginOtp->update($payload);
+                } else {
+                    LoginOtp::create($payload);
+                }
             });
 
             return response()->json([
@@ -91,7 +98,7 @@ class AuthController extends Controller
                     'mobile'      => $mobile,
                     'user_exists' => (bool) $existingUser,
                     'is_new_user' => !$existingUser,
-                    'otp'         => $otp,
+                    'otp'         => $otp, // Remove this in production.
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -136,7 +143,7 @@ class AuthController extends Controller
                 $deviceId = $request->device_id;
                 $fcmToken = $request->filled('fcm_token') ? $request->fcm_token : null;
 
-                $user = User::where('mobile', $mobile)->first();
+                $user = User::where('mobile', $mobile)->lockForUpdate()->first();
 
                 if ($user && $user->status !== 'active') {
                     return response()->json([
@@ -151,15 +158,17 @@ class AuthController extends Controller
                 }
 
                 $loginOtp = LoginOtp::where('mobile', $mobile)
+                    ->where('purpose', 'login')
                     ->where('is_used', false)
                     ->whereNull('verified_at')
+                    ->lockForUpdate()
                     ->latest('id')
                     ->first();
 
                 if (!$loginOtp) {
                     return response()->json([
                         'status'  => false,
-                        'message' => 'OTP not found or already used. Please send OTP again.',
+                        'message' => 'OTP not found or already used. Please resend OTP.',
                     ], 422);
                 }
 
@@ -170,7 +179,7 @@ class AuthController extends Controller
 
                     return response()->json([
                         'status'  => false,
-                        'message' => 'OTP expired. Please send OTP again.',
+                        'message' => 'OTP expired. Please resend OTP.',
                     ], 422);
                 }
 
@@ -186,8 +195,15 @@ class AuthController extends Controller
                 $isNewUser = false;
 
                 if (!$user) {
+                    if (!$request->filled('name')) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Name is required for new registration.',
+                        ], 422);
+                    }
+
                     $user = User::create([
-                        'name'               => $request->filled('name') ? $request->name : 'User',
+                        'name'               => $request->name,
                         'mobile'             => $mobile,
                         'password'           => Hash::make(Str::random(32)),
                         'status'             => 'active',
@@ -203,7 +219,7 @@ class AuthController extends Controller
                         'last_login_at'      => now(),
                     ];
 
-                    if ($request->filled('name') && empty($user->name)) {
+                    if ($request->filled('name')) {
                         $updateData['name'] = $request->name;
                     }
 
@@ -218,15 +234,17 @@ class AuthController extends Controller
                     'device_id'   => $deviceId,
                     'verified_at' => now(),
                     'is_used'     => true,
+                    'attempts'    => 0,
+                    'ip_address'  => $request->ip(),
+                    'user_agent'  => $request->userAgent(),
                 ]);
 
                 /*
                 |--------------------------------------------------------------------------
-                | Save device token
+                | Device Token Logic
                 |--------------------------------------------------------------------------
-                | device_id and fcm_token are different.
-                | device_id = mobile device unique id
-                | fcm_token = Firebase push notification token
+                | device_id = physical device unique id
+                | fcm_token = Firebase notification token
                 */
                 if (!empty($fcmToken)) {
                     DeviceToken::where('fcm_token', $fcmToken)
@@ -236,19 +254,24 @@ class AuthController extends Controller
                         ]);
                 }
 
+                $deviceTokenPayload = [
+                    'is_active'    => 1,
+                    'last_used_at' => now(),
+                    'ip_address'   => $request->ip(),
+                    'user_agent'   => $request->userAgent(),
+                ];
+
+                if (!empty($fcmToken)) {
+                    $deviceTokenPayload['fcm_token'] = $fcmToken;
+                }
+
                 $deviceToken = DeviceToken::updateOrCreate(
                     [
                         'user_id'   => $user->id,
                         'platform'  => $platform,
                         'device_id' => $deviceId,
                     ],
-                    [
-                        'fcm_token'    => $fcmToken,
-                        'is_active'    => 1,
-                        'last_used_at' => now(),
-                        'ip_address'   => $request->ip(),
-                        'user_agent'   => $request->userAgent(),
-                    ]
+                    $deviceTokenPayload
                 );
 
                 $token = $user->createToken('user-auth-token')->plainTextToken;
