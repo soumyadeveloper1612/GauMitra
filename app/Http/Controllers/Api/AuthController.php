@@ -45,8 +45,19 @@ class AuthController extends Controller
 
         $isNewUser = !$existingUser;
 
-        // Testing OTP: last 4 digits of mobile number
+        /*
+        |--------------------------------------------------------------------------
+        | Testing OTP: Last 4 Digits Of Mobile
+        |--------------------------------------------------------------------------
+        */
+
         $otp = substr($mobile, -4);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Mark old unused OTP as used
+        |--------------------------------------------------------------------------
+        */
 
         LoginOtp::where('mobile', $mobile)
             ->where('is_used', false)
@@ -54,6 +65,12 @@ class AuthController extends Controller
             ->update([
                 'is_used' => true,
             ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create fresh OTP row
+        |--------------------------------------------------------------------------
+        */
 
         LoginOtp::create([
             'user_id'     => $existingUser?->id,
@@ -75,7 +92,11 @@ class AuthController extends Controller
                 'user_exists' => (bool) $existingUser,
                 'is_new_user' => $isNewUser,
 
-                // Testing purpose only
+                /*
+                |--------------------------------------------------------------------------
+                | Testing Purpose Only
+                |--------------------------------------------------------------------------
+                */
                 'otp'         => $otp,
             ],
         ]);
@@ -90,17 +111,18 @@ class AuthController extends Controller
             'platform'  => 'required|string|in:android,ios,web',
 
             /*
-             * Your current app sends Firebase token in device_id.
-             * So keep device_id required.
-             */
+            |--------------------------------------------------------------------------
+            | device_id should be real device unique id
+            |--------------------------------------------------------------------------
+            */
             'device_id' => 'required|string|max:1000',
 
             /*
-             * New recommended field.
-             * If app sends fcm_token, we use it.
-             * If not, we fallback to device_id.
-             */
-            'fcm_token' => 'nullable|string|max:2000',
+            |--------------------------------------------------------------------------
+            | fcm_token should be real Firebase FCM token
+            |--------------------------------------------------------------------------
+            */
+            'fcm_token' => 'nullable|string|max:3000',
         ]);
 
         if ($validator->fails()) {
@@ -116,11 +138,28 @@ class AuthController extends Controller
         $platform = $request->platform;
 
         /*
-         * Important:
-         * Current mobile app stores FCM token in device_id.
-         * So this fixes fcm_token NULL issue.
-         */
+        |--------------------------------------------------------------------------
+        | Testing OTP: Last 4 Digits
+        |--------------------------------------------------------------------------
+        */
+
+        $testingOtp = substr($mobile, -4);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Token Handling
+        |--------------------------------------------------------------------------
+        | Best practice:
+        | device_id = unique phone/device id
+        | fcm_token = Firebase token
+        |
+        | For your current Postman/app testing:
+        | if fcm_token is missing, fallback to device_id.
+        |--------------------------------------------------------------------------
+        */
+
         $deviceId = $request->device_id;
+
         $fcmToken = $request->filled('fcm_token')
             ? $request->fcm_token
             : $request->device_id;
@@ -140,18 +179,53 @@ class AuthController extends Controller
             ], 403);
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Find Latest Active OTP
+        |--------------------------------------------------------------------------
+        */
+
         $loginOtp = LoginOtp::where('mobile', $mobile)
             ->where('is_used', false)
             ->whereNull('verified_at')
-            ->latest()
+            ->latest('id')
             ->first();
 
+        /*
+        |--------------------------------------------------------------------------
+        | If OTP Row Not Found
+        |--------------------------------------------------------------------------
+        | Because you are using mobile last 4 digit OTP for testing,
+        | allow verification if OTP matches mobile last 4 digits.
+        |--------------------------------------------------------------------------
+        */
+
         if (!$loginOtp) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'OTP not found or already used',
-            ], 404);
+            if ($otp !== $testingOtp) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'OTP not found or already used',
+                ], 422);
+            }
+
+            $loginOtp = LoginOtp::create([
+                'user_id'     => $user?->id,
+                'mobile'      => $mobile,
+                'otp_hash'    => Hash::make($testingOtp),
+                'expires_at'  => now()->addMinutes(10),
+                'verified_at' => null,
+                'is_used'     => false,
+                'attempts'    => 0,
+                'ip_address'  => $request->ip(),
+                'user_agent'  => $request->userAgent(),
+            ]);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Expiry Check
+        |--------------------------------------------------------------------------
+        */
 
         if ($loginOtp->expires_at && now()->greaterThan($loginOtp->expires_at)) {
             return response()->json([
@@ -159,6 +233,12 @@ class AuthController extends Controller
                 'message' => 'OTP expired',
             ], 422);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | OTP Check
+        |--------------------------------------------------------------------------
+        */
 
         if (!Hash::check($otp, $loginOtp->otp_hash)) {
             $loginOtp->increment('attempts');
@@ -168,6 +248,12 @@ class AuthController extends Controller
                 'message' => 'Invalid OTP',
             ], 422);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Or Update User
+        |--------------------------------------------------------------------------
+        */
 
         if (!$user) {
             $user = User::create([
@@ -196,8 +282,11 @@ class AuthController extends Controller
         }
 
         /*
-         * Update login_otps row.
-         */
+        |--------------------------------------------------------------------------
+        | Update Login OTP Row
+        |--------------------------------------------------------------------------
+        */
+
         $loginOtp->update([
             'user_id'     => $user->id,
             'platform'    => $platform,
@@ -207,37 +296,45 @@ class AuthController extends Controller
         ]);
 
         /*
-         * Deactivate old duplicate token rows for other users/devices.
-         * This prevents one FCM token being active in multiple rows.
-         */
-        DeviceToken::where('fcm_token', $fcmToken)
-            ->where('user_id', '!=', $user->id)
-            ->update([
-                'is_active' => false,
-            ]);
+        |--------------------------------------------------------------------------
+        | Deactivate Same FCM Token From Other Users
+        |--------------------------------------------------------------------------
+        */
+
+        if (!empty($fcmToken)) {
+            DeviceToken::where('fcm_token', $fcmToken)
+                ->where('user_id', '!=', $user->id)
+                ->update([
+                    'is_active' => false,
+                ]);
+        }
 
         /*
-         * Store/update device_tokens table.
-         *
-         * Main fix:
-         * fcm_token will now be saved.
-         */
-        if ($request->filled('platform') && $request->filled('device_id')) {
-            DeviceToken::updateOrCreate(
-                [
-                    'user_id'   => $user->id,
-                    'platform'  => $request->platform,
-                    'device_id' => $request->device_id,
-                ],
-                [
-                    'fcm_token'    => $request->fcm_token,
-                    'is_active'    => true,
-                    'last_used_at' => now(),
-                    'ip_address'   => $request->ip(),
-                    'user_agent'   => $request->userAgent(),
-                ]
-            );
-        }
+        |--------------------------------------------------------------------------
+        | Store / Update Device Token
+        |--------------------------------------------------------------------------
+        */
+
+        $deviceToken = DeviceToken::updateOrCreate(
+            [
+                'user_id'   => $user->id,
+                'platform'  => $platform,
+                'device_id' => $deviceId,
+            ],
+            [
+                'fcm_token'    => $fcmToken,
+                'is_active'    => true,
+                'last_used_at' => now(),
+                'ip_address'   => $request->ip(),
+                'user_agent'   => $request->userAgent(),
+            ]
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Sanctum Token
+        |--------------------------------------------------------------------------
+        */
 
         $token = $user->createToken('user-auth-token')->plainTextToken;
 
