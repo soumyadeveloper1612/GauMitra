@@ -16,7 +16,7 @@ use App\Http\Controllers\Api\MasterDataController;
     Route::get('/manage-conditions', [MasterDataController::class, 'animalConditions']);
     Route::get('/emergency-case-options', [MasterDataController::class, 'emergencyCaseOptions']);
 
-    
+
     Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -49,8 +49,8 @@ use App\Http\Controllers\Api\MasterDataController;
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/get-emergency-cases', [EmergencyCaseController::class, 'index']);
     Route::post('/emergency-cases', [EmergencyCaseController::class, 'store']);
+    Route::get('/emergency-cases', [EmergencyCaseController::class, 'index']);
     Route::get('/emergency-cases/{id}', [EmergencyCaseController::class, 'show']);
 
 
