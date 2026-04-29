@@ -30,101 +30,295 @@ class EmergencyCaseController extends Controller
     ) {
     }
 
+    // public function store(Request $request)
+    // {
+    //     $validator = Validator::make($request->all(), [
+    //         'animal_type_id'       => ['required', 'integer', 'exists:animal_types,id'],
+    //         'report_type_id'       => ['required', 'integer', 'exists:report_types,id'],
+    //         'animal_condition_id'  => ['nullable', 'integer', 'exists:animal_conditions,id'],
+
+    //         'severity'             => ['nullable', Rule::in(EmergencyCase::SEVERITIES)],
+    //         'contact_number'       => ['required', 'digits:10'],
+
+    //         'title'                => ['nullable', 'string', 'max:255'],
+    //         'description'          => ['nullable', 'string'],
+    //         'cattle_count'         => ['nullable', 'integer', 'min:1'],
+
+    //         'vehicle_number'       => ['nullable', 'string', 'max:50'],
+    //         'vehicle_details'      => ['nullable', 'string', 'max:500'],
+
+    //         'full_address'         => ['required', 'string'],
+    //         'area_name'            => ['nullable', 'string', 'max:150'],
+    //         'land_mark'            => ['nullable', 'string', 'max:150'],
+    //         'road_name'            => ['nullable', 'string', 'max:150'],
+    //         'city'                 => ['required', 'string', 'max:150'],
+    //         'district'             => ['nullable', 'string', 'max:150'],
+    //         'state'                => ['nullable', 'string', 'max:150'],
+    //         'pincode'              => ['nullable', 'digits:6'],
+
+    //         'latitude'             => ['required', 'numeric', 'between:-90,90'],
+    //         'longitude'            => ['required', 'numeric', 'between:-180,180'],
+
+    //         // keep nullable only. File validation is handled inside saveEmergencyCaseMedia()
+    //         'photos'               => ['nullable'],
+    //         'photos.*'             => ['nullable'],
+    //         'videos'               => ['nullable'],
+    //         'videos.*'             => ['nullable'],
+    //     ], [
+    //         'animal_type_id.required'     => 'Animal type is required.',
+    //         'animal_type_id.exists'       => 'Selected animal type is invalid.',
+    //         'report_type_id.required'     => 'Report type is required.',
+    //         'report_type_id.exists'       => 'Selected report type is invalid.',
+    //         'animal_condition_id.exists'  => 'Selected animal condition is invalid.',
+    //         'severity.in'                 => 'Severity must be low, medium, high or critical.',
+    //         'contact_number.required'     => 'Contact number is required.',
+    //         'contact_number.digits'       => 'Contact number must be 10 digits.',
+    //         'full_address.required'       => 'Full address is required.',
+    //         'city.required'               => 'City is required.',
+    //         'latitude.required'           => 'Latitude is required.',
+    //         'latitude.between'            => 'Latitude must be between -90 and 90.',
+    //         'longitude.required'          => 'Longitude is required.',
+    //         'longitude.between'           => 'Longitude must be between -180 and 180.',
+    //     ]);
+
+    //     $validator->after(function ($validator) use ($request) {
+    //         if ($request->filled('animal_condition_id') && $request->filled('report_type_id')) {
+    //             $conditionExists = AnimalCondition::where('id', $request->animal_condition_id)
+    //                 ->where('report_type_id', $request->report_type_id)
+    //                 ->where('status', 'active')
+    //                 ->exists();
+
+    //             if (!$conditionExists) {
+    //                 $validator->errors()->add(
+    //                     'animal_condition_id',
+    //                     'Selected animal condition does not belong to selected report type.'
+    //                 );
+    //             }
+    //         }
+
+    //         if ($request->filled('animal_type_id')) {
+    //             $animalActive = AnimalType::where('id', $request->animal_type_id)
+    //                 ->where('status', 'active')
+    //                 ->exists();
+
+    //             if (!$animalActive) {
+    //                 $validator->errors()->add('animal_type_id', 'Selected animal type is inactive.');
+    //             }
+    //         }
+
+    //         if ($request->filled('report_type_id')) {
+    //             $reportTypeActive = ReportType::where('id', $request->report_type_id)
+    //                 ->where('status', 'active')
+    //                 ->exists();
+
+    //             if (!$reportTypeActive) {
+    //                 $validator->errors()->add('report_type_id', 'Selected report type is inactive.');
+    //             }
+    //         }
+    //     });
+
+    //     if ($validator->fails()) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Validation failed.',
+    //             'errors'  => $validator->errors(),
+    //         ], 422);
+    //     }
+
+    //     DB::beginTransaction();
+
+    //     try {
+    //         $userId = auth('sanctum')->id();
+
+    //         $animalType = AnimalType::findOrFail($request->animal_type_id);
+    //         $reportType = ReportType::findOrFail($request->report_type_id);
+
+    //         $animalCondition = null;
+
+    //         if ($request->filled('animal_condition_id')) {
+    //             $animalCondition = AnimalCondition::findOrFail($request->animal_condition_id);
+    //         }
+
+    //         $severity = $request->severity;
+
+    //         if (!$severity && $animalCondition) {
+    //             $severity = $animalCondition->severity_level;
+    //         }
+
+    //         if (!$severity) {
+    //             $severity = 'medium';
+    //         }
+
+    //         $case = EmergencyCase::create([
+    //             'case_uid'             => $this->generateCaseUid(),
+    //             'reporter_id'          => $userId,
+
+    //             'animal_type_id'       => $animalType->id,
+    //             'report_type_id'       => $reportType->id,
+    //             'animal_condition_id'  => $animalCondition?->id,
+
+    //             'case_type'            => $reportType->slug,
+    //             'title'                => $request->title ?: $reportType->name,
+    //             'description'          => $request->description,
+    //             'severity'             => $severity,
+    //             'cattle_count'         => $request->cattle_count ?? 1,
+    //             'contact_number'       => $request->contact_number,
+
+    //             'vehicle_number'       => $request->vehicle_number,
+    //             'vehicle_details'      => $request->vehicle_details,
+
+    //             'full_address'         => $request->full_address,
+    //             'area_name'            => $request->area_name,
+    //             'land_mark'            => $request->land_mark,
+    //             'road_name'            => $request->road_name,
+    //             'city'                 => $request->city,
+    //             'district'             => $request->district,
+    //             'state'                => $request->state,
+    //             'pincode'              => $request->pincode,
+
+    //             'latitude'             => $request->latitude,
+    //             'longitude'            => $request->longitude,
+
+    //             'status'               => 'reported',
+    //             'is_duplicate'         => false,
+    //             'notified_radius_km'   => 20,
+    //             'escalation_level'     => 0,
+    //         ]);
+
+    //         $mediaResult = $this->saveEmergencyCaseMedia($request, $case);
+    //         $mediaSavedCount = $mediaResult['saved_count'];
+
+    //         EmergencyCaseLog::create([
+    //             'emergency_case_id' => $case->id,
+    //             'user_id'           => $userId,
+    //             'action'            => 'case_reported',
+    //             'old_status'        => null,
+    //             'new_status'        => 'reported',
+    //             'notes'             => 'Emergency case reported from mobile app.',
+    //             'latitude'          => $request->latitude,
+    //             'longitude'         => $request->longitude,
+    //             'meta'              => [
+    //                 'animal_type_id'      => $animalType->id,
+    //                 'report_type_id'      => $reportType->id,
+    //                 'animal_condition_id' => $animalCondition?->id,
+    //                 'media_saved_count'   => $mediaSavedCount,
+    //                 'upload_debug'        => $mediaResult['debug'],
+    //             ],
+    //         ]);
+
+    //         DB::commit();
+
+    //         $case->load([
+    //             'animalType:id,name,slug,icon_class,color_code',
+    //             'reportType:id,name,slug,icon_class,color_code',
+    //             'animalCondition:id,name,slug,severity_level,icon_class,color_code',
+    //             'reporter:id,name,mobile',
+    //             'media',
+    //         ]);
+
+    //         $pushResult = [
+    //             'success_count' => 0,
+    //             'failure_count' => 0,
+    //             'results'       => [],
+    //             'message'       => 'Reporter notification not sent',
+    //         ];
+
+    //         try {
+    //             $case->loadMissing('reporter');
+
+    //             if ($case->reporter) {
+    //                 $pushResult = $this->pushService->sendToUser(
+    //                     user: $case->reporter,
+    //                     title: 'Emergency Case Submitted',
+    //                     body: 'Your emergency report ' . $case->case_uid . ' has been submitted successfully.',
+    //                     data: [
+    //                         'type'      => 'emergency_case_created',
+    //                         'case_id'   => (string) $case->id,
+    //                         'case_uid'  => (string) $case->case_uid,
+    //                         'status'    => (string) $case->status,
+    //                         'case_type' => (string) $case->case_type,
+    //                         'severity'  => (string) $case->severity,
+    //                         'screen'    => 'EmergencyCaseDetails',
+    //                     ],
+    //                     imageUrl: null,
+    //                     platform: null,
+    //                     sound: 'default',
+    //                     androidChannelId: 'default'
+    //                 );
+    //             }
+    //         } catch (\Throwable $e) {
+    //             Log::error('Reporter Firebase notification failed', [
+    //                 'case_id' => $case->id,
+    //                 'user_id' => $case->reporter_id,
+    //                 'error'   => $e->getMessage(),
+    //             ]);
+
+    //             $pushResult = [
+    //                 'success_count' => 0,
+    //                 'failure_count' => 1,
+    //                 'results'       => [],
+    //                 'message'       => $e->getMessage(),
+    //             ];
+    //         }
+
+    //         $severityAlertResult = [
+    //             'success_count' => 0,
+    //             'failure_count' => 0,
+    //             'results'       => [],
+    //             'message'       => 'Severity alert not sent',
+    //         ];
+
+    //         try {
+    //             $severityAlertResult = $this->caseAlertService->sendSeverityWiseAlert($case);
+    //         } catch (\Throwable $e) {
+    //             Log::error('Severity wise emergency alert failed', [
+    //                 'case_id'  => $case->id,
+    //                 'severity' => $case->severity,
+    //                 'error'    => $e->getMessage(),
+    //             ]);
+
+    //             $severityAlertResult = [
+    //                 'success_count' => 0,
+    //                 'failure_count' => 1,
+    //                 'results'       => [],
+    //                 'message'       => $e->getMessage(),
+    //             ];
+    //         }
+
+    //         return response()->json([
+    //             'status'                => true,
+    //             'message'               => 'Emergency case reported successfully.',
+    //             'data'                  => $case,
+    //             'media_count'           => $case->media->count(),
+    //             'media_saved_count'     => $mediaSavedCount,
+    //             'upload_debug'          => $mediaResult['debug'],
+    //             'reporter_push_result'  => $pushResult,
+    //             'severity_alert_result' => $severityAlertResult,
+    //             'alerted_users'         => $severityAlertResult['success_count'] ?? 0,
+    //         ], 201);
+
+    //     } catch (\Throwable $e) {
+    //         DB::rollBack();
+
+    //         Log::error('Emergency case store failed', [
+    //             'user_id' => auth('sanctum')->id(),
+    //             'message' => $e->getMessage(),
+    //             'file'    => $e->getFile(),
+    //             'line'    => $e->getLine(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Server error. Emergency case could not be saved.',
+    //             'error'   => config('app.debug') ? $e->getMessage() : null,
+    //             'line'    => config('app.debug') ? $e->getLine() : null,
+    //         ], 500);
+    //     }
+    // }
+
+
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'animal_type_id'       => ['required', 'integer', 'exists:animal_types,id'],
-            'report_type_id'       => ['required', 'integer', 'exists:report_types,id'],
-            'animal_condition_id'  => ['nullable', 'integer', 'exists:animal_conditions,id'],
-
-            'severity'             => ['nullable', Rule::in(EmergencyCase::SEVERITIES)],
-            'contact_number'       => ['required', 'digits:10'],
-
-            'title'                => ['nullable', 'string', 'max:255'],
-            'description'          => ['nullable', 'string'],
-            'cattle_count'         => ['nullable', 'integer', 'min:1'],
-
-            'vehicle_number'       => ['nullable', 'string', 'max:50'],
-            'vehicle_details'      => ['nullable', 'string', 'max:500'],
-
-            'full_address'         => ['required', 'string'],
-            'area_name'            => ['nullable', 'string', 'max:150'],
-            'land_mark'            => ['nullable', 'string', 'max:150'],
-            'road_name'            => ['nullable', 'string', 'max:150'],
-            'city'                 => ['required', 'string', 'max:150'],
-            'district'             => ['nullable', 'string', 'max:150'],
-            'state'                => ['nullable', 'string', 'max:150'],
-            'pincode'              => ['nullable', 'digits:6'],
-
-            'latitude'             => ['required', 'numeric', 'between:-90,90'],
-            'longitude'            => ['required', 'numeric', 'between:-180,180'],
-
-            // keep nullable only. File validation is handled inside saveEmergencyCaseMedia()
-            'photos'               => ['nullable'],
-            'photos.*'             => ['nullable'],
-            'videos'               => ['nullable'],
-            'videos.*'             => ['nullable'],
-        ], [
-            'animal_type_id.required'     => 'Animal type is required.',
-            'animal_type_id.exists'       => 'Selected animal type is invalid.',
-            'report_type_id.required'     => 'Report type is required.',
-            'report_type_id.exists'       => 'Selected report type is invalid.',
-            'animal_condition_id.exists'  => 'Selected animal condition is invalid.',
-            'severity.in'                 => 'Severity must be low, medium, high or critical.',
-            'contact_number.required'     => 'Contact number is required.',
-            'contact_number.digits'       => 'Contact number must be 10 digits.',
-            'full_address.required'       => 'Full address is required.',
-            'city.required'               => 'City is required.',
-            'latitude.required'           => 'Latitude is required.',
-            'latitude.between'            => 'Latitude must be between -90 and 90.',
-            'longitude.required'          => 'Longitude is required.',
-            'longitude.between'           => 'Longitude must be between -180 and 180.',
-        ]);
-
-        $validator->after(function ($validator) use ($request) {
-            if ($request->filled('animal_condition_id') && $request->filled('report_type_id')) {
-                $conditionExists = AnimalCondition::where('id', $request->animal_condition_id)
-                    ->where('report_type_id', $request->report_type_id)
-                    ->where('status', 'active')
-                    ->exists();
-
-                if (!$conditionExists) {
-                    $validator->errors()->add(
-                        'animal_condition_id',
-                        'Selected animal condition does not belong to selected report type.'
-                    );
-                }
-            }
-
-            if ($request->filled('animal_type_id')) {
-                $animalActive = AnimalType::where('id', $request->animal_type_id)
-                    ->where('status', 'active')
-                    ->exists();
-
-                if (!$animalActive) {
-                    $validator->errors()->add('animal_type_id', 'Selected animal type is inactive.');
-                }
-            }
-
-            if ($request->filled('report_type_id')) {
-                $reportTypeActive = ReportType::where('id', $request->report_type_id)
-                    ->where('status', 'active')
-                    ->exists();
-
-                if (!$reportTypeActive) {
-                    $validator->errors()->add('report_type_id', 'Selected report type is inactive.');
-                }
-            }
-        });
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Validation failed.',
-                'errors'  => $validator->errors(),
-            ], 422);
-        }
-
         DB::beginTransaction();
 
         try {
@@ -1506,5 +1700,5 @@ class EmergencyCaseController extends Controller
                 [$latitude, $longitude, $latitude, $radiusKm]
             );
     }
-    
+
 }
