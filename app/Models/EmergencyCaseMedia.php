@@ -35,27 +35,31 @@ class EmergencyCaseMedia extends Model
 
     public function getFileUrlAttribute()
     {
-        if (!$this->file_path) {
+        if (empty($this->file_path)) {
             return null;
         }
 
-        if (str_starts_with($this->file_path, 'http://') || str_starts_with($this->file_path, 'https://')) {
-            return $this->file_path;
+        $path = ltrim($this->file_path, '/');
+
+        if (preg_match('/^https?:\/\//', $path)) {
+            return $path;
         }
 
-        return asset('storage/' . ltrim($this->file_path, '/'));
+        return asset('storage/' . $path);
     }
 
     public function getFormattedFileSizeAttribute()
     {
-        if (!$this->file_size) {
+        if (empty($this->file_size)) {
             return null;
         }
 
-        if ($this->file_size >= 1024 * 1024) {
-            return round($this->file_size / (1024 * 1024), 2) . ' MB';
+        $size = (int) $this->file_size;
+
+        if ($size >= 1024 * 1024) {
+            return round($size / (1024 * 1024), 2) . ' MB';
         }
 
-        return round($this->file_size / 1024, 2) . ' KB';
+        return round($size / 1024, 2) . ' KB';
     }
 }

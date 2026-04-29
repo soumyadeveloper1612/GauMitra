@@ -32,147 +32,170 @@ class EmergencyCaseController extends Controller
 
     public function index(Request $request)
     {
-        $query = EmergencyCase::with([
-                'animalType:id,name,slug,icon_class,color_code',
-                'reportType:id,name,slug,icon_class,color_code',
-                'animalCondition:id,name,slug,severity_level,icon_class,color_code',
-                'reporter:id,name,mobile',
-                'currentHandler:id,name,mobile',
-                'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
-            ])
-            ->latest();
+        try {
+            $query = EmergencyCase::query()
+                ->with([
+                    'animalType:id,name,slug,icon_class,color_code',
+                    'reportType:id,name,slug,icon_class,color_code',
+                    'animalCondition:id,name,slug,severity_level,icon_class,color_code',
+                    'reporter:id,name,mobile',
+                    'currentHandler:id,name,mobile',
+                    'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
+                ])
+                ->latest();
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('animal_type_id')) {
+                $query->where('animal_type_id', $request->animal_type_id);
+            }
+
+            if ($request->filled('report_type_id')) {
+                $query->where('report_type_id', $request->report_type_id);
+            }
+
+            if ($request->filled('animal_condition_id')) {
+                $query->where('animal_condition_id', $request->animal_condition_id);
+            }
+
+            if ($request->filled('severity')) {
+                $query->where('severity', $request->severity);
+            }
+
+            if ($request->filled('city')) {
+                $query->where('city', 'LIKE', '%' . $request->city . '%');
+            }
+
+            if ($request->filled('district')) {
+                $query->where('district', 'LIKE', '%' . $request->district . '%');
+            }
+
+            if ($request->filled('pincode')) {
+                $query->where('pincode', $request->pincode);
+            }
+
+            if ($request->filled('from_date')) {
+                $query->whereDate('created_at', '>=', $request->from_date);
+            }
+
+            if ($request->filled('to_date')) {
+                $query->whereDate('created_at', '<=', $request->to_date);
+            }
+
+            $perPage = (int) $request->get('per_page', 15);
+
+            if ($perPage <= 0) {
+                $perPage = 15;
+            }
+
+            if ($perPage > 100) {
+                $perPage = 100;
+            }
+
+            $cases = $query->paginate($perPage);
+
+            $cases->getCollection()->transform(function ($case) {
+                $media = $case->media ?? collect();
+
+                $photos = $media->where('media_type', 'photo')->values();
+                $videos = $media->where('media_type', 'video')->values();
+
+                $case->media_count = $media->count();
+                $case->photo_count = $photos->count();
+                $case->video_count = $videos->count();
+
+                $case->photos = $photos;
+                $case->videos = $videos;
+
+                $case->photo_urls = $photos->pluck('file_url')->filter()->values();
+                $case->video_urls = $videos->pluck('file_url')->filter()->values();
+
+                return $case;
+            });
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Emergency cases fetched successfully.',
+                'data'    => $cases,
+            ]);
+
+        } catch (\Throwable $e) {
+            \Log::error('Emergency cases index failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Server error while fetching emergency cases.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
         }
-
-        if ($request->filled('animal_type_id')) {
-            $query->where('animal_type_id', $request->animal_type_id);
-        }
-
-        if ($request->filled('report_type_id')) {
-            $query->where('report_type_id', $request->report_type_id);
-        }
-
-        if ($request->filled('animal_condition_id')) {
-            $query->where('animal_condition_id', $request->animal_condition_id);
-        }
-
-        if ($request->filled('severity')) {
-            $query->where('severity', $request->severity);
-        }
-
-        if ($request->filled('city')) {
-            $query->where('city', 'LIKE', '%' . $request->city . '%');
-        }
-
-        if ($request->filled('district')) {
-            $query->where('district', 'LIKE', '%' . $request->district . '%');
-        }
-
-        if ($request->filled('pincode')) {
-            $query->where('pincode', $request->pincode);
-        }
-
-        if ($request->filled('from_date')) {
-            $query->whereDate('created_at', '>=', $request->from_date);
-        }
-
-        if ($request->filled('to_date')) {
-            $query->whereDate('created_at', '<=', $request->to_date);
-        }
-
-        $perPage = (int) $request->get('per_page', 15);
-        $perPage = $perPage > 100 ? 100 : $perPage;
-
-        $cases = $query->paginate($perPage);
-
-        $cases->getCollection()->transform(function ($case) {
-            $case->media_count = $case->media->count();
-
-            $case->photo_count = $case->media
-                ->where('media_type', 'photo')
-                ->count();
-
-            $case->video_count = $case->media
-                ->where('media_type', 'video')
-                ->count();
-
-            $case->photo_urls = $case->media
-                ->where('media_type', 'photo')
-                ->pluck('file_url')
-                ->values();
-
-            $case->video_urls = $case->media
-                ->where('media_type', 'video')
-                ->pluck('file_url')
-                ->values();
-
-            return $case;
-        });
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'Emergency cases fetched successfully.',
-            'data'    => $cases,
-        ]);
     }
 
     public function show($id)
     {
-        $case = EmergencyCase::with([
-                'animalType:id,name,slug,icon_class,color_code',
-                'reportType:id,name,slug,icon_class,color_code',
-                'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps,description',
-                'reporter:id,name,mobile',
-                'currentHandler:id,name,mobile',
-                'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
-                'logs' => function ($query) {
-                    $query->latest();
-                },
-            ])
-            ->find($id);
+        try {
+            $case = EmergencyCase::with([
+                    'animalType:id,name,slug,icon_class,color_code',
+                    'reportType:id,name,slug,icon_class,color_code',
+                    'animalCondition:id,name,slug,severity_level,icon_class,color_code,symptoms,first_aid_steps,description',
+                    'reporter:id,name,mobile',
+                    'currentHandler:id,name,mobile',
+                    'media:id,emergency_case_id,user_id,media_type,file_path,file_name,mime_type,file_size,created_at',
+                    'logs' => function ($query) {
+                        $query->latest();
+                    },
+                ])
+                ->find($id);
 
-        if (!$case) {
+            if (!$case) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Emergency case not found.',
+                ], 404);
+            }
+
+            $media = $case->media ?? collect();
+
+            $photos = $media->where('media_type', 'photo')->values();
+            $videos = $media->where('media_type', 'video')->values();
+
+            $case->media_count = $media->count();
+            $case->photo_count = $photos->count();
+            $case->video_count = $videos->count();
+
+            $case->photos = $photos;
+            $case->videos = $videos;
+
+            $case->photo_urls = $photos->pluck('file_url')->filter()->values();
+            $case->video_urls = $videos->pluck('file_url')->filter()->values();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Emergency case details fetched successfully.',
+                'data'    => $case,
+            ]);
+
+        } catch (\Throwable $e) {
+            \Log::error('Emergency case show failed', [
+                'case_id' => $id,
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status'  => false,
-                'message' => 'Emergency case not found.',
-            ], 404);
+                'message' => 'Server error while fetching emergency case details.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
         }
-
-        $case->media_count = $case->media->count();
-
-        $case->photo_count = $case->media
-            ->where('media_type', 'photo')
-            ->count();
-
-        $case->video_count = $case->media
-            ->where('media_type', 'video')
-            ->count();
-
-        $case->photos = $case->media
-            ->where('media_type', 'photo')
-            ->values();
-
-        $case->videos = $case->media
-            ->where('media_type', 'video')
-            ->values();
-
-        $case->photo_urls = $case->media
-            ->where('media_type', 'photo')
-            ->pluck('file_url')
-            ->values();
-
-        $case->video_urls = $case->media
-            ->where('media_type', 'video')
-            ->pluck('file_url')
-            ->values();
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'Emergency case details fetched successfully.',
-            'data'    => $case,
-        ]);
     }
 
     public function store(Request $request)
