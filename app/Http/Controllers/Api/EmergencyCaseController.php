@@ -1339,7 +1339,7 @@ class EmergencyCaseController extends Controller
         ]);
     }
 
-    public function myAddressWiseEmergencyCases(Request $request)
+    public function addressWiseCases(Request $request)
     {
         $user = $request->user();
 
