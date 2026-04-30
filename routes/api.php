@@ -50,8 +50,6 @@ use App\Http\Controllers\Api\MasterDataController;
     */
 
     Route::post('/emergency-cases', [EmergencyCaseController::class, 'store']);
-    Route::get('/emergency-cases', [EmergencyCaseController::class, 'index']);
-    Route::get('/emergency-cases/{id}', [EmergencyCaseController::class, 'show']);
 
 
     Route::post('/emergency-cases/{id}/accept', [EmergencyCaseController::class, 'acceptReport']);
@@ -63,7 +61,9 @@ use App\Http\Controllers\Api\MasterDataController;
 
     Route::get('/my-emergency-cases', [EmergencyCaseController::class, 'myReports']);
     Route::get('/my-emergency-cases/{id}', [EmergencyCaseController::class, 'myReportDetails']);
+    Route::get('/my-reported-emergency-cases', [EmergencyCaseController::class, 'myReportedCases']);
 });
 
+Route::get('/address-wise-emergency-cases', [EmergencyCaseController::class, 'addressWiseCases']);
 Route::get('/emergency-cases/area-wise', [EmergencyCaseController::class, 'areaWiseReports']);
 Route::get('/emergency-cases/area-wise/{id}', [EmergencyCaseController::class, 'areaWiseReportDetails']);

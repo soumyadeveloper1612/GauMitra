@@ -161,4 +161,25 @@ class EmergencyCase extends Model
             'duplicate_case',
         ]);
     }
+
+    public function acceptedAssignments()
+    {
+        return $this->hasMany(EmergencyCaseAssignment::class, 'emergency_case_id')
+            ->whereIn('status', [
+                'accepted',
+                'en_route',
+                'reached',
+                'completed',
+            ]);
+    }
+
+    public function scopeNotClosed($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('status')
+                ->orWhere('status', '!=', 'closed');
+        });
+    }
+
+    
 }

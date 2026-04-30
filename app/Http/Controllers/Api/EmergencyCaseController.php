@@ -1279,5 +1279,299 @@ class EmergencyCaseController extends Controller
         return $uid;
     }
 
+    public function myReportedCases(Request $request)
+    {
+        $user = $request->user();
+
+        $perPage = (int) $request->input('per_page', 10);
+        $perPage = $perPage > 50 ? 50 : $perPage;
+
+        $query = EmergencyCase::query()
+            ->where('reporter_id', $user->id)
+            ->notClosed()
+            ->with([
+                'animalType:id,name,slug',
+                'reportType:id,name,slug',
+                'animalCondition:id,name,severity_level,color_code',
+                'reporter:id,name,mobile,profile_photo',
+                'currentHandler:id,name,mobile,profile_photo',
+                'media',
+                'photos',
+                'videos',
+                'logs',
+                'assignments.user:id,name,mobile,profile_photo',
+                'acceptedAssignments.user:id,name,mobile,profile_photo',
+                'alerts',
+            ])
+            ->withCount([
+                'media',
+                'photos',
+                'videos',
+                'logs',
+                'assignments',
+                'alerts',
+            ])
+            ->latest();
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('case_type')) {
+            $query->where('case_type', $request->case_type);
+        }
+
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
+        $cases = $query->paginate($perPage);
+
+        $cases->getCollection()->transform(function ($case) {
+            return $this->formatEmergencyCase($case, true, true);
+        });
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'My reported emergency cases fetched successfully.',
+            'data'    => $cases,
+        ]);
+    }
+
+    public function addressWiseCases(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'area_name' => 'nullable|string|max:191',
+            'city'      => 'nullable|string|max:191',
+            'district'  => 'nullable|string|max:191',
+            'state'     => 'nullable|string|max:191',
+            'pincode'   => 'nullable|string|max:20',
+            'per_page'  => 'nullable|integer|min:1|max:50',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed.',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        if (
+            !$request->filled('area_name') &&
+            !$request->filled('city') &&
+            !$request->filled('district') &&
+            !$request->filled('state') &&
+            !$request->filled('pincode')
+        ) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please send at least one address field: area_name, city, district, state, or pincode.',
+            ], 422);
+        }
+
+        $perPage = (int) $request->input('per_page', 10);
+        $perPage = $perPage > 50 ? 50 : $perPage;
+
+        $query = EmergencyCase::query()
+            ->notClosed()
+            ->with([
+                'animalType:id,name,slug',
+                'reportType:id,name,slug',
+                'animalCondition:id,name,severity_level,color_code',
+                'media',
+                'photos',
+                'videos',
+                'assignments.user:id,name,profile_photo',
+                'acceptedAssignments.user:id,name,profile_photo',
+            ])
+            ->withCount([
+                'media',
+                'photos',
+                'videos',
+                'assignments',
+            ])
+            ->latest();
+
+        $this->applyAddressFilter($query, $request);
+
+        $cases = $query->paginate($perPage);
+
+        $cases->getCollection()->transform(function ($case) {
+            return $this->formatEmergencyCase($case, false, false);
+        });
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Address-wise emergency cases fetched successfully.',
+            'data'    => $cases,
+        ]);
+    }
+
+    private function applyAddressFilter($query, Request $request)
+    {
+        $fields = [
+            'area_name',
+            'city',
+            'district',
+            'state',
+        ];
+
+        foreach ($fields as $field) {
+            if ($request->filled($field)) {
+                $value = Str::lower(trim($request->input($field)));
+
+                $query->whereRaw("LOWER(TRIM({$field})) = ?", [$value]);
+            }
+        }
+
+        if ($request->filled('pincode')) {
+            $query->where('pincode', trim($request->pincode));
+        }
+    }
+
+    private function formatEmergencyCase($case, bool $includeReporter = false, bool $includeSensitive = false)
+    {
+        return [
+            'id'                 => $case->id,
+            'case_uid'           => $case->case_uid,
+            'case_type'          => $case->case_type,
+            'title'              => $case->title,
+            'description'        => $case->description,
+            'severity'           => $case->severity,
+            'cattle_count'       => $case->cattle_count,
+
+            'contact_number'     => $includeSensitive ? $case->contact_number : null,
+            'vehicle_number'     => $includeSensitive ? $case->vehicle_number : null,
+            'vehicle_details'    => $includeSensitive ? $case->vehicle_details : null,
+
+            'full_address'       => $case->full_address,
+            'area_name'          => $case->area_name,
+            'land_mark'          => $case->land_mark,
+            'road_name'          => $case->road_name,
+            'city'               => $case->city,
+            'district'           => $case->district,
+            'state'              => $case->state,
+            'pincode'            => $case->pincode,
+            'latitude'           => $case->latitude,
+            'longitude'          => $case->longitude,
+
+            'status'             => $case->status,
+            'is_duplicate'       => $case->is_duplicate,
+            'notified_radius_km' => $case->notified_radius_km,
+            'escalation_level'   => $case->escalation_level,
+
+            'accepted_at'        => optional($case->accepted_at)->format('Y-m-d H:i:s'),
+            'en_route_at'        => optional($case->en_route_at)->format('Y-m-d H:i:s'),
+            'reached_at'         => optional($case->reached_at)->format('Y-m-d H:i:s'),
+            'rescue_started_at'  => optional($case->rescue_started_at)->format('Y-m-d H:i:s'),
+            'resolved_at'        => optional($case->resolved_at)->format('Y-m-d H:i:s'),
+            'closed_at'          => optional($case->closed_at)->format('Y-m-d H:i:s'),
+
+            'resolution_notes'   => $includeSensitive ? $case->resolution_notes : null,
+            'false_report_reason'=> $includeSensitive ? $case->false_report_reason : null,
+
+            'animal_type' => $case->animalType ? [
+                'id'   => $case->animalType->id,
+                'name' => $case->animalType->name,
+                'slug' => $case->animalType->slug ?? null,
+            ] : null,
+
+            'report_type' => $case->reportType ? [
+                'id'   => $case->reportType->id,
+                'name' => $case->reportType->name,
+                'slug' => $case->reportType->slug ?? null,
+            ] : null,
+
+            'animal_condition' => $case->animalCondition ? [
+                'id'             => $case->animalCondition->id,
+                'name'           => $case->animalCondition->name,
+                'severity_level' => $case->animalCondition->severity_level ?? null,
+                'color_code'     => $case->animalCondition->color_code ?? null,
+            ] : null,
+
+            'reporter' => $includeReporter && $case->reporter ? [
+                'id'            => $case->reporter->id,
+                'name'          => $case->reporter->name,
+                'mobile'        => $case->reporter->mobile,
+                'profile_photo' => $case->reporter->profile_photo,
+            ] : null,
+
+            'current_handler' => $case->currentHandler ? [
+                'id'            => $case->currentHandler->id,
+                'name'          => $case->currentHandler->name,
+                'mobile'        => $includeSensitive ? $case->currentHandler->mobile : null,
+                'profile_photo' => $case->currentHandler->profile_photo,
+            ] : null,
+
+            'accepted_user_list' => $case->acceptedAssignments ? $case->acceptedAssignments->map(function ($assignment) use ($includeSensitive) {
+                return [
+                    'assignment_id'   => $assignment->id,
+                    'assignment_role' => $assignment->assignment_role,
+                    'status'          => $assignment->status,
+                    'distance_km'     => $assignment->distance_km,
+                    'accepted_at'     => optional($assignment->accepted_at)->format('Y-m-d H:i:s'),
+                    'rejected_at'     => optional($assignment->rejected_at)->format('Y-m-d H:i:s'),
+                    'reached_at'      => optional($assignment->reached_at)->format('Y-m-d H:i:s'),
+                    'completed_at'    => optional($assignment->completed_at)->format('Y-m-d H:i:s'),
+                    'cancelled_at'    => optional($assignment->cancelled_at)->format('Y-m-d H:i:s'),
+                    'notes'           => $assignment->notes,
+                    'user'            => $assignment->user ? [
+                        'id'            => $assignment->user->id,
+                        'name'          => $assignment->user->name,
+                        'mobile'        => $includeSensitive ? $assignment->user->mobile : null,
+                        'profile_photo' => $assignment->user->profile_photo,
+                    ] : null,
+                ];
+            })->values() : [],
+
+            'all_assignment_list' => $case->assignments ? $case->assignments->map(function ($assignment) use ($includeSensitive) {
+                return [
+                    'assignment_id'   => $assignment->id,
+                    'assignment_role' => $assignment->assignment_role,
+                    'status'          => $assignment->status,
+                    'distance_km'     => $assignment->distance_km,
+                    'accepted_at'     => optional($assignment->accepted_at)->format('Y-m-d H:i:s'),
+                    'rejected_at'     => optional($assignment->rejected_at)->format('Y-m-d H:i:s'),
+                    'reached_at'      => optional($assignment->reached_at)->format('Y-m-d H:i:s'),
+                    'completed_at'    => optional($assignment->completed_at)->format('Y-m-d H:i:s'),
+                    'cancelled_at'    => optional($assignment->cancelled_at)->format('Y-m-d H:i:s'),
+                    'notes'           => $assignment->notes,
+                    'user'            => $assignment->user ? [
+                        'id'            => $assignment->user->id,
+                        'name'          => $assignment->user->name,
+                        'mobile'        => $includeSensitive ? $assignment->user->mobile : null,
+                        'profile_photo' => $assignment->user->profile_photo,
+                    ] : null,
+                ];
+            })->values() : [],
+
+            'media' => $case->media ? $case->media->map(function ($media) {
+                return [
+                    'id'                  => $media->id,
+                    'media_type'          => $media->media_type,
+                    'file_path'           => $media->file_path,
+                    'file_url'            => $media->file_url,
+                    'file_name'           => $media->file_name,
+                    'mime_type'           => $media->mime_type,
+                    'file_size'           => $media->file_size,
+                    'formatted_file_size' => $media->formatted_file_size,
+                ];
+            })->values() : [],
+
+            'counts' => [
+                'media_count'       => $case->media_count ?? 0,
+                'photos_count'      => $case->photos_count ?? 0,
+                'videos_count'      => $case->videos_count ?? 0,
+                'logs_count'        => $case->logs_count ?? 0,
+                'assignments_count' => $case->assignments_count ?? 0,
+                'alerts_count'      => $case->alerts_count ?? 0,
+            ],
+
+            'created_at' => optional($case->created_at)->format('Y-m-d H:i:s'),
+            'updated_at' => optional($case->updated_at)->format('Y-m-d H:i:s'),
+        ];
+    }
+
 
 }
