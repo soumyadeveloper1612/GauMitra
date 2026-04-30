@@ -24,11 +24,13 @@ use Illuminate\Support\Facades\Storage;
 class EmergencyCaseController extends Controller
 {
 
-    public function __construct(
-        protected FirebasePushService $pushService,
-        protected EmergencyCaseAlertService $caseAlertService
-    ) {
-    }
+   public function __construct(
+    FirebasePushService $pushService,
+    EmergencyCaseAlertService $caseAlertService
+) {
+    $this->pushService = $pushService;
+    $this->caseAlertService = $caseAlertService;
+}
 
     public function store(Request $request)
     {
