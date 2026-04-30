@@ -107,7 +107,6 @@ class EmergencyCase extends Model
         return $this->belongsTo(User::class, 'reporter_id');
     }
 
-
     public function media()
     {
         return $this->hasMany(EmergencyCaseMedia::class, 'emergency_case_id');
@@ -135,7 +134,7 @@ class EmergencyCase extends Model
         return $this->hasMany(EmergencyCaseAssignment::class, 'emergency_case_id');
     }
 
-       public function myAssignment()
+    public function myAssignment()
     {
         return $this->hasOne(EmergencyCaseAssignment::class, 'emergency_case_id')
             ->where('user_id', auth('sanctum')->id());

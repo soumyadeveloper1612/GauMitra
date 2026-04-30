@@ -1099,8 +1099,8 @@ class EmergencyCaseController extends Controller
             ]),
         ]);
     }
-        
-    public function closeReport(Request $request, $id)
+
+    public function close(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
             'resolution_notes'    => ['nullable', 'string', 'max:2000'],
