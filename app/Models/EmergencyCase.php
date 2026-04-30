@@ -194,5 +194,4 @@ class EmergencyCase extends Model
         ]);
     }
 
-
 }
