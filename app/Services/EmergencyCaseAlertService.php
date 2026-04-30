@@ -4,321 +4,186 @@ namespace App\Services;
 
 use App\Models\DeviceToken;
 use App\Models\EmergencyCase;
+use App\Models\EmergencyCaseAlert;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Builder;
+use App\Models\UserAddress;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class EmergencyCaseAlertService
 {
     public function __construct(
-        protected FirebasePushService $pushService
+        private readonly FirebasePushService $firebasePushService
     ) {
     }
 
-    public function sendSeverityWiseAlert(EmergencyCase $case): array
+    public function notifySameAreaUsers(EmergencyCase $case): array
     {
-        $severity = strtolower($case->severity ?? 'medium');
+        $areaName = $this->normalize($case->area_name);
+        $city = $this->normalize($case->city);
+        $district = $this->normalize($case->district);
 
-        if (in_array($severity, ['high', 'critical'])) {
-            return $this->sendDistrictAlert($case);
-        }
-
-        if ($severity === 'medium') {
-            return $this->sendCityAlert($case);
-        }
-
-        return $this->sendAreaAlert($case);
-    }
-
-    private function sendAreaAlert(EmergencyCase $case): array
-    {
-        $tokens = $this->getTokensByAddressScope($case, 'area');
-
-        return $this->pushService->sendToTokens(
-            tokens: $tokens,
-            title: 'Nearby Gau Rescue Alert',
-            body: 'A low severity case has been reported near ' . ($case->area_name ?: $case->city ?: 'your area') . '. Please check if you can help.',
-            data: $this->casePayload($case, 'area'),
-            imageUrl: null,
-            sound: 'gau_alert_low',
-            androidChannelId: 'emergency_low_alerts'
-        );
-    }
-
-    private function sendCityAlert(EmergencyCase $case): array
-    {
-        $tokens = $this->getTokensByAddressScope($case, 'city');
-
-        return $this->pushService->sendToTokens(
-            tokens: $tokens,
-            title: 'City Gau Emergency Alert',
-            body: 'A medium severity case has been reported in ' . ($case->city ?: 'your city') . '.',
-            data: $this->casePayload($case, 'city'),
-            imageUrl: null,
-            sound: 'gau_alert_medium',
-            androidChannelId: 'emergency_medium_alerts'
-        );
-    }
-
-    private function sendDistrictAlert(EmergencyCase $case): array
-    {
-        $tokens = $this->getTokensByAddressScope($case, 'district');
-
-        return $this->pushService->sendToTokens(
-            tokens: $tokens,
-            title: 'High Gau Emergency Alert',
-            body: 'High priority emergency reported in ' . ($case->district ?: $case->city ?: 'your area') . '. Immediate support may be required.',
-            data: $this->casePayload($case, 'district'),
-            imageUrl: null,
-            sound: 'gau_alert_high',
-            androidChannelId: 'emergency_high_alerts'
-        );
-    }
-
-    private function getTokensByAddressScope(EmergencyCase $case, string $scope): array
-    {
-        try {
-            $tokens = DeviceToken::query()
-                ->active()
-                ->withFcmToken()
-                ->whereHas('user', function (Builder $userQuery) use ($case, $scope) {
-                    $userQuery
-                        ->where('status', 'active')
-
-                        // Reporter already receives confirmation notification.
-                        ->when($case->reporter_id, function ($q) use ($case) {
-                            $q->where('id', '!=', $case->reporter_id);
-                        })
-
-                        ->whereHas('addresses', function (Builder $addressQuery) use ($case, $scope) {
-                            $this->notDeletedAddress($addressQuery);
-
-                            if ($scope === 'area') {
-                                $this->applyAreaFilter($addressQuery, $case);
-                            } elseif ($scope === 'city') {
-                                $this->applyCityFilter($addressQuery, $case);
-                            } else {
-                                $this->applyDistrictFilter($addressQuery, $case);
-                            }
-                        });
-                })
-                ->pluck('fcm_token')
-                ->filter()
-                ->unique()
-                ->values()
-                ->toArray();
-
-            Log::info('Emergency severity alert tokens fetched', [
-                'case_id'     => $case->id,
-                'case_uid'    => $case->case_uid,
-                'reporter_id' => $case->reporter_id,
-                'scope'       => $scope,
-                'severity'    => $case->severity,
-                'token_count' => count($tokens),
-                'area_name'   => $case->area_name,
-                'city'        => $case->city,
-                'district'    => $case->district,
-                'pincode'     => $case->pincode,
-                'latitude'    => $case->latitude,
-                'longitude'   => $case->longitude,
-            ]);
-
-            return $tokens;
-        } catch (\Throwable $e) {
-            Log::error('Severity wise token fetch failed', [
+        if (!$areaName || !$city || !$district) {
+            Log::warning('Emergency alert skipped because location data is incomplete.', [
                 'case_id' => $case->id,
-                'scope'   => $scope,
-                'error'   => $e->getMessage(),
-                'line'    => $e->getLine(),
+                'area_name' => $case->area_name,
+                'city' => $case->city,
+                'district' => $case->district,
             ]);
 
-            return [];
+            return [
+                'status' => false,
+                'message' => 'Case location incomplete. area_name, city and district are required.',
+                'matched_users' => 0,
+                'tokens' => 0,
+            ];
         }
-    }
 
-    private function notDeletedAddress(Builder $query): void
-    {
-        $query->where(function ($q) {
-            $q->whereNull('status')
-              ->orWhere('status', '!=', 'deleted');
-        });
-    }
+        /**
+         * Find users whose saved address matches:
+         * same area_name + same city + same district.
+         */
+        $matchedUserIds = UserAddress::query()
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhere('status', '!=', 'deleted');
+            })
+            ->whereRaw('LOWER(TRIM(area_name)) = ?', [$areaName])
+            ->whereRaw('LOWER(TRIM(city)) = ?', [$city])
+            ->whereRaw('LOWER(TRIM(district)) = ?', [$district])
+            ->when($case->reporter_id, function ($q) use ($case) {
+                $q->where('user_id', '!=', $case->reporter_id);
+            })
+            ->distinct()
+            ->pluck('user_id')
+            ->filter()
+            ->values();
 
-    private function applyAreaFilter(Builder $query, EmergencyCase $case): void
-    {
-        $query->where(function ($q) use ($case) {
-            $this->orWhereNormalizedEquals($q, 'area_name', $case->area_name);
+        if ($matchedUserIds->isEmpty()) {
+            return [
+                'status' => true,
+                'message' => 'No same-area registered users found.',
+                'matched_users' => 0,
+                'tokens' => 0,
+            ];
+        }
 
-            if (!empty($case->pincode)) {
-                $q->orWhere('pincode', $case->pincode);
+        $users = User::query()
+            ->whereIn('id', $matchedUserIds)
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhere('status', 'active');
+            })
+            ->with(['deviceTokens' => function ($q) {
+                $q->active()->withFcmToken();
+            }])
+            ->get();
+
+        $tokens = [];
+        $alertRows = [];
+
+        foreach ($users as $user) {
+            foreach ($user->deviceTokens as $deviceToken) {
+                $tokens[] = $deviceToken->fcm_token;
+
+                $alertRows[] = [
+                    'emergency_case_id' => $case->id,
+                    'user_id' => $user->id,
+                    'fcm_token' => $deviceToken->fcm_token,
+                    'platform' => $deviceToken->platform,
+                    'area_name' => $case->area_name,
+                    'city' => $case->city,
+                    'district' => $case->district,
+                    'status' => 'pending',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
             }
-
-            // Fallback: exact same city.
-            $this->orWhereNormalizedEquals($q, 'city', $case->city);
-
-            // Best fallback: same lat/lng area within 20 KM.
-            $this->orWhereWithinKm($q, $case, 20);
-        });
-    }
-
-    private function applyCityFilter(Builder $query, EmergencyCase $case): void
-    {
-        $query->where(function ($q) use ($case) {
-            $this->orWhereNormalizedEquals($q, 'city', $case->city);
-
-            if (!empty($case->pincode)) {
-                $q->orWhere('pincode', $case->pincode);
-            }
-
-            // Medium severity fallback: users within 35 KM.
-            $this->orWhereWithinKm($q, $case, 35);
-        });
-    }
-
-    private function applyDistrictFilter(Builder $query, EmergencyCase $case): void
-    {
-        $query->where(function ($q) use ($case) {
-            $this->orWhereNormalizedEquals($q, 'district', $case->district);
-
-            // Fallback if district value is different or missing.
-            $this->orWhereNormalizedEquals($q, 'city', $case->city);
-
-            // High severity fallback: users within 75 KM.
-            $this->orWhereWithinKm($q, $case, 75);
-        });
-    }
-
-    private function orWhereNormalizedEquals($query, string $column, ?string $value): void
-    {
-        $value = $this->cleanText($value);
-
-        if ($value === null) {
-            return;
         }
 
-        $query->orWhereRaw("LOWER(TRIM($column)) = ?", [$value]);
-    }
+        $tokens = array_values(array_unique(array_filter($tokens)));
 
-    private function orWhereWithinKm($query, EmergencyCase $case, float $radiusKm): void
-    {
-        if ($case->latitude === null || $case->longitude === null) {
-            return;
+        if (empty($tokens)) {
+            return [
+                'status' => true,
+                'message' => 'Same-area users found, but no active FCM tokens found.',
+                'matched_users' => $users->count(),
+                'tokens' => 0,
+            ];
         }
 
-        $lat = (float) $case->latitude;
-        $lng = (float) $case->longitude;
-
-        if ($lat == 0.0 && $lng == 0.0) {
-            return;
+        if (!empty($alertRows)) {
+            EmergencyCaseAlert::insert($alertRows);
         }
 
-        $query->orWhere(function ($distanceQuery) use ($lat, $lng, $radiusKm) {
-            $distanceQuery
-                ->whereNotNull('latitude')
-                ->whereNotNull('longitude')
-                ->whereRaw(
-                    '(6371 * ACOS(LEAST(1, GREATEST(-1,
-                        COS(RADIANS(?)) *
-                        COS(RADIANS(latitude)) *
-                        COS(RADIANS(longitude) - RADIANS(?)) +
-                        SIN(RADIANS(?)) *
-                        SIN(RADIANS(latitude))
-                    )))) <= ?',
-                    [$lat, $lng, $lat, $radiusKm]
-                );
-        });
+        $title = $this->makeTitle($case);
+        $body = $this->makeBody($case);
+
+        $result = $this->firebasePushService->sendEmergencyAlertToTokens(
+            tokens: $tokens,
+            title: $title,
+            body: $body,
+            data: [
+                'type' => 'emergency_case_alert',
+                'case_id' => $case->id,
+                'case_uid' => $case->case_uid,
+                'severity' => $case->severity,
+                'status' => $case->status,
+                'area_name' => $case->area_name,
+                'city' => $case->city,
+                'district' => $case->district,
+                'latitude' => $case->latitude,
+                'longitude' => $case->longitude,
+            ]
+        );
+
+        EmergencyCaseAlert::where('emergency_case_id', $case->id)
+            ->whereIn('fcm_token', $tokens)
+            ->update([
+                'status' => $result['success'] ? 'sent' : 'failed',
+                'sent_at' => $result['success'] ? now() : null,
+                'error_message' => $result['success']
+                    ? null
+                    : json_encode($result['failed_tokens'] ?? []),
+                'updated_at' => now(),
+            ]);
+
+        return [
+            'status' => true,
+            'message' => 'Emergency alert process completed.',
+            'matched_users' => $users->count(),
+            'tokens' => count($tokens),
+            'firebase_result' => $result,
+        ];
     }
 
-    private function cleanText(?string $value): ?string
+    private function normalize(?string $value): ?string
     {
-        $value = trim((string) $value);
-
-        if ($value === '') {
+        if (!$value) {
             return null;
         }
 
-        return Str::lower($value);
+        return Str::of($value)
+            ->lower()
+            ->trim()
+            ->replaceMatches('/\s+/', ' ')
+            ->toString();
     }
 
-    private function casePayload(EmergencyCase $case, string $alertScope): array
+    private function makeTitle(EmergencyCase $case): string
     {
-        return [
-            'type'        => 'emergency_case_alert',
-            'case_id'     => (string) $case->id,
-            'case_uid'    => (string) $case->case_uid,
-            'status'      => (string) $case->status,
-            'case_type'   => (string) $case->case_type,
-            'severity'    => (string) $case->severity,
-            'alert_scope' => (string) $alertScope,
-            'screen'      => 'EmergencyCaseDetails',
-            'latitude'    => (string) ($case->latitude ?? ''),
-            'longitude'   => (string) ($case->longitude ?? ''),
-        ];
+        $severity = strtoupper($case->severity ?? 'ALERT');
+
+        return "GauMitra {$severity} Emergency Alert";
     }
 
-    public function sendCaseAcceptedSeverityWiseAlert(EmergencyCase $case, ?User $acceptedByUser = null): array
+    private function makeBody(EmergencyCase $case): string
     {
-        $severity = strtolower($case->severity ?? 'medium');
+        $area = $case->area_name ?: 'your area';
+        $city = $case->city ?: '';
+        $district = $case->district ?: '';
 
-        $responderName = $acceptedByUser?->name ?? 'A responder';
-
-        if (in_array($severity, ['high', 'critical'])) {
-            $tokens = $this->getTokensByAddressScope($case, 'district');
-
-            return $this->pushService->sendToTokens(
-                tokens: $tokens,
-                title: 'High Alert Case Accepted',
-                body: $responderName . ' accepted case ' . $case->case_uid . ' and is going to the spot.',
-                data: $this->acceptedCasePayload($case, $acceptedByUser, 'district'),
-                imageUrl: null,
-                sound: 'gau_alert_high',
-                androidChannelId: 'emergency_high_alerts'
-            );
-        }
-
-        if ($severity === 'medium') {
-            $tokens = $this->getTokensByAddressScope($case, 'city');
-
-            return $this->pushService->sendToTokens(
-                tokens: $tokens,
-                title: 'City Case Accepted',
-                body: $responderName . ' accepted case ' . $case->case_uid . ' and is going to the spot.',
-                data: $this->acceptedCasePayload($case, $acceptedByUser, 'city'),
-                imageUrl: null,
-                sound: 'gau_alert_medium',
-                androidChannelId: 'emergency_medium_alerts'
-            );
-        }
-
-        $tokens = $this->getTokensByAddressScope($case, 'area');
-
-        return $this->pushService->sendToTokens(
-            tokens: $tokens,
-            title: 'Nearby Case Accepted',
-            body: $responderName . ' accepted case ' . $case->case_uid . ' and is going to the spot.',
-            data: $this->acceptedCasePayload($case, $acceptedByUser, 'area'),
-            imageUrl: null,
-            sound: 'gau_alert_low',
-            androidChannelId: 'emergency_low_alerts'
-        );
-    }
-
-    private function acceptedCasePayload(EmergencyCase $case, ?User $acceptedByUser, string $alertScope): array
-    {
-        return [
-            'type'                  => 'emergency_case_accepted_alert',
-            'case_id'               => (string) $case->id,
-            'case_uid'              => (string) $case->case_uid,
-            'status'                => (string) $case->status,
-            'case_type'             => (string) $case->case_type,
-            'severity'              => (string) $case->severity,
-            'alert_scope'           => (string) $alertScope,
-            'accepted_by_user_id'   => (string) ($acceptedByUser?->id ?? ''),
-            'accepted_by_user_name' => (string) ($acceptedByUser?->name ?? ''),
-            'screen'                => 'EmergencyCaseDetails',
-            'latitude'              => (string) ($case->latitude ?? ''),
-            'longitude'             => (string) ($case->longitude ?? ''),
-        ];
+        return "Emergency case reported near {$area}, {$city}, {$district}. Tap to view and help.";
     }
 }

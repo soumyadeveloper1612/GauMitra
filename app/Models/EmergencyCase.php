@@ -162,4 +162,6 @@ class EmergencyCase extends Model
             'duplicate_case',
         ]);
     }
+
+    
 }
