@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\DeviceToken;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
-use Kreait\Firebase\Messaging\AndroidConfig;
-use Kreait\Firebase\Messaging\ApnsConfig;
 use Kreait\Firebase\Messaging\CloudMessage;
-use Kreait\Firebase\Messaging\Notification;
+use Throwable;
 
 class FirebasePushService
 {
@@ -24,28 +23,26 @@ class FirebasePushService
         array $data = [],
         ?string $imageUrl = null,
         ?string $platform = null,
-        string $sound = 'gau_alert',
-        string $androidChannelId = 'gau_mitra_emergency_alerts'
+        string $sound = 'default',
+        string $androidChannelId = 'default'
     ): array {
-        $tokens = $user->deviceTokens()
+        $query = DeviceToken::query()
+            ->where('user_id', $user->id)
             ->active()
-            ->withFcmToken()
-            ->platform($platform)
+            ->withFcmToken();
+
+        if (!empty($platform)) {
+            $query->platform($platform);
+        }
+
+        $tokens = $query
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('id')
             ->pluck('fcm_token')
             ->filter()
             ->unique()
             ->values()
             ->toArray();
-
-        if (empty($tokens)) {
-            return [
-                'success_count' => 0,
-                'failure_count' => 0,
-                'results'       => [],
-                'message'       => 'No active FCM token found for this user.',
-                'first_error'   => null,
-            ];
-        }
 
         return $this->sendToTokens(
             tokens: $tokens,
@@ -64,123 +61,236 @@ class FirebasePushService
         string $body,
         array $data = [],
         ?string $imageUrl = null,
-        string $sound = 'gau_alert',
-        string $androidChannelId = 'gau_mitra_emergency_alerts'
+        string $sound = 'default',
+        string $androidChannelId = 'default'
     ): array {
         $tokens = array_values(array_unique(array_filter($tokens)));
 
-        if (empty($tokens)) {
+        $validTokens = [];
+        $skippedTokens = [];
+
+        foreach ($tokens as $token) {
+            if ($this->looksLikeValidFcmToken($token)) {
+                $validTokens[] = $token;
+            } else {
+                $skippedTokens[] = $token;
+
+                DeviceToken::where('fcm_token', $token)->update([
+                    'is_active' => false,
+                ]);
+            }
+        }
+
+        if (empty($validTokens)) {
             return [
                 'success_count' => 0,
-                'failure_count' => 0,
-                'results'       => [],
-                'message'       => 'No FCM tokens found.',
-                'first_error'   => null,
+                'failure_count' => count($skippedTokens),
+                'results'       => collect($skippedTokens)->map(function ($token) {
+                    return [
+                        'token'   => $token,
+                        'status'  => 'skipped',
+                        'message' => 'Invalid or fake FCM token skipped.',
+                    ];
+                })->values()->toArray(),
+                'message'     => 'No valid Firebase tokens found.',
+                'first_error' => null,
             ];
         }
 
-        $data = collect($data)
-            ->map(fn ($value) => is_scalar($value) ? (string) $value : json_encode($value))
-            ->toArray();
+        $stringData = $this->stringifyData($data);
 
-        $data['click_action'] = $data['click_action'] ?? 'FLUTTER_NOTIFICATION_CLICK';
-        $data['sound'] = $sound;
-        $data['channel_id'] = $androidChannelId;
-
-        $notification = Notification::create($title, $body);
-
-        if ($imageUrl) {
-            $notification = $notification->withImageUrl($imageUrl);
+        if (!empty($imageUrl)) {
+            $stringData['image_url'] = $imageUrl;
         }
 
-        $message = CloudMessage::new()
-            ->withNotification($notification)
-            ->withData($data)
-            ->withAndroidConfig(AndroidConfig::fromArray([
-                'priority' => 'high',
-                'notification' => [
-                    'title'      => $title,
-                    'body'       => $body,
-                    'channel_id' => $androidChannelId,
-                    'sound'      => $sound,
-                    'priority'   => 'high',
-                ],
-            ]))
-            ->withApnsConfig(ApnsConfig::fromArray([
-                'headers' => [
-                    'apns-priority' => '10',
-                ],
-                'payload' => [
-                    'aps' => [
-                        'alert' => [
-                            'title' => $title,
-                            'body'  => $body,
-                        ],
-                        'sound' => $sound . '.caf',
-                    ],
-                ],
-            ]));
+        $androidSound = $sound === 'default'
+            ? 'default'
+            : pathinfo($sound, PATHINFO_FILENAME);
+
+        $iosSound = $sound === 'default'
+            ? 'default'
+            : $this->iosSoundName($sound);
 
         $successCount = 0;
         $failureCount = 0;
         $results = [];
         $firstError = null;
 
-        foreach (array_chunk($tokens, 500) as $chunk) {
+        foreach ($validTokens as $token) {
             try {
-                $report = $this->messaging->sendMulticast($message, $chunk);
+                $notification = [
+                    'title' => $title,
+                    'body'  => $body,
+                ];
 
-                $successCount += $report->successes()->count();
-                $failureCount += $report->failures()->count();
+                if (!empty($imageUrl)) {
+                    $notification['image'] = $imageUrl;
+                }
 
-                foreach ($report->successes()->getItems() as $success) {
-                    $results[] = [
-                        'token'  => method_exists($success->target(), 'value') ? $success->target()->value() : null,
-                        'status' => 'sent',
-                        'error'  => null,
+                $messageArray = [
+                    'token'        => $token,
+                    'notification' => $notification,
+                    'data'         => array_merge($stringData, [
+                        'sound'              => $androidSound,
+                        'ios_sound'          => $iosSound,
+                        'android_channel_id' => $androidChannelId,
+                    ]),
+                    'android' => [
+                        'priority' => 'high',
+                        'notification' => [
+                            'sound'      => $androidSound,
+                            'channel_id' => $androidChannelId,
+                        ],
+                    ],
+                    'apns' => [
+                        'headers' => [
+                            'apns-priority' => '10',
+                        ],
+                        'payload' => [
+                            'aps' => [
+                                'sound' => $iosSound,
+                            ],
+                        ],
+                    ],
+                ];
+
+                if (!empty($imageUrl)) {
+                    $messageArray['android']['notification']['image'] = $imageUrl;
+                    $messageArray['apns']['fcm_options'] = [
+                        'image' => $imageUrl,
                     ];
                 }
 
-                foreach ($report->failures()->getItems() as $failure) {
-                    $error = $failure->error()->getMessage();
+                $message = CloudMessage::fromArray($messageArray);
 
-                    if (!$firstError) {
-                        $firstError = $error;
-                    }
+                $this->messaging->send($message);
 
-                    $results[] = [
-                        'token'  => method_exists($failure->target(), 'value') ? $failure->target()->value() : null,
-                        'status' => 'failed',
-                        'error'  => $error,
-                    ];
-                }
-            } catch (\Throwable $e) {
-                $failureCount += count($chunk);
+                $successCount++;
 
-                if (!$firstError) {
-                    $firstError = $e->getMessage();
-                }
-
-                Log::error('Firebase push failed', [
-                    'error' => $e->getMessage(),
+                DeviceToken::where('fcm_token', $token)->update([
+                    'is_active'    => true,
+                    'last_used_at' => now(),
                 ]);
 
-                foreach ($chunk as $token) {
-                    $results[] = [
-                        'token'  => $token,
-                        'status' => 'failed',
-                        'error'  => $e->getMessage(),
-                    ];
+                $results[] = [
+                    'token'   => $token,
+                    'status'  => 'sent',
+                    'message' => 'Notification sent successfully.',
+                ];
+            } catch (Throwable $e) {
+                $failureCount++;
+
+                $errorMessage = $e->getMessage();
+
+                if ($firstError === null) {
+                    $firstError = $errorMessage;
                 }
+
+                Log::warning('FCM send failed', [
+                    'token' => $token,
+                    'error' => $errorMessage,
+                ]);
+
+                if ($this->isInvalidFirebaseTokenError($errorMessage)) {
+                    DeviceToken::where('fcm_token', $token)->update([
+                        'is_active' => false,
+                    ]);
+                }
+
+                $results[] = [
+                    'token'   => $token,
+                    'status'  => 'failed',
+                    'message' => $errorMessage,
+                ];
             }
+        }
+
+        foreach ($skippedTokens as $token) {
+            $results[] = [
+                'token'   => $token,
+                'status'  => 'skipped',
+                'message' => 'Invalid or fake FCM token skipped.',
+            ];
         }
 
         return [
             'success_count' => $successCount,
-            'failure_count' => $failureCount,
+            'failure_count' => $failureCount + count($skippedTokens),
             'results'       => $results,
-            'message'       => $successCount > 0 ? 'Notification sent successfully.' : 'Notification failed.',
+            'message'       => $successCount > 0
+                ? 'Notification process completed.'
+                : ($firstError ?: 'Firebase notification failed.'),
             'first_error'   => $firstError,
         ];
+    }
+
+    private function stringifyData(array $data): array
+    {
+        $stringData = [];
+
+        foreach ($data as $key => $value) {
+            if ($value === null) {
+                $stringData[$key] = '';
+            } elseif (is_scalar($value)) {
+                $stringData[$key] = (string) $value;
+            } else {
+                $stringData[$key] = json_encode($value);
+            }
+        }
+
+        return $stringData;
+    }
+
+    private function iosSoundName(string $sound): string
+    {
+        if (str_contains($sound, '.')) {
+            return $sound;
+        }
+
+        return $sound . '.caf';
+    }
+
+    private function looksLikeValidFcmToken(?string $token): bool
+    {
+        if (empty($token)) {
+            return false;
+        }
+
+        $token = trim($token);
+
+        if (strlen($token) < 80) {
+            return false;
+        }
+
+        $invalidWords = [
+            'device-token',
+            'device-id',
+            'test-token',
+            'firebase-token',
+            'paste-real',
+            'sample',
+            'dummy',
+            'null',
+        ];
+
+        foreach ($invalidWords as $word) {
+            if (str_contains(strtolower($token), $word)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isInvalidFirebaseTokenError(string $message): bool
+    {
+        $message = strtolower($message);
+
+        return str_contains($message, 'not found') ||
+            str_contains($message, 'invalid') ||
+            str_contains($message, 'registration token') ||
+            str_contains($message, 'requested entity was not found') ||
+            str_contains($message, 'unregistered') ||
+            str_contains($message, 'not a valid fcm registration token');
     }
 }

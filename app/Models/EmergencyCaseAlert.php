@@ -2,30 +2,33 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class EmergencyCaseAlert extends Model
 {
-    use HasFactory;
-
     protected $table = 'emergency_case_alerts';
 
     protected $fillable = [
         'emergency_case_id',
         'user_id',
-        'fcm_token',
-        'platform',
-        'area_name',
-        'city',
-        'district',
+        'device_token_id',
+        'notification_type',
+        'radius_km',
+        'distance_km',
         'status',
-        'error_message',
         'sent_at',
+        'seen_at',
+        'responded_at',
+        'response',
+        'error_message',
     ];
 
     protected $casts = [
-        'sent_at' => 'datetime',
+        'radius_km'    => 'decimal:2',
+        'distance_km'  => 'decimal:2',
+        'sent_at'      => 'datetime',
+        'seen_at'      => 'datetime',
+        'responded_at' => 'datetime',
     ];
 
     public function emergencyCase()
@@ -36,5 +39,10 @@ class EmergencyCaseAlert extends Model
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function deviceToken()
+    {
+        return $this->belongsTo(DeviceToken::class, 'device_token_id');
     }
 }

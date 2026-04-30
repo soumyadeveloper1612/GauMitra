@@ -20,17 +20,16 @@ use App\Services\FirebasePushService;
 use App\Services\EmergencyCaseAlertService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class EmergencyCaseController extends Controller
 {
 
-   public function __construct(
-    FirebasePushService $pushService,
-    EmergencyCaseAlertService $caseAlertService
-) {
-    $this->pushService = $pushService;
-    $this->caseAlertService = $caseAlertService;
-}
+    public function __construct(
+        protected FirebasePushService $pushService,
+        protected EmergencyCaseAlertService $caseAlertService
+    ) {
+    }
 
     public function store(Request $request)
     {
@@ -125,75 +124,85 @@ class EmergencyCaseController extends Controller
                 'media',
             ]);
 
-            /*
-            |--------------------------------------------------------------------------
-            | 1. Self Notification To Reporter User
-            |--------------------------------------------------------------------------
-            | This will notify the same user who submitted the emergency case.
-            */
-            $selfPushResult = $this->sendReporterCaseSubmittedNotification($case);
-
-            /*
-            |--------------------------------------------------------------------------
-            | 2. Alert Other Matching Users
-            |--------------------------------------------------------------------------
-            | This will notify area/city/district users according to your alert service.
-            | Reporter user is already excluded inside your EmergencyCaseAlertService.
-            */
-            $severityAlertResult = [
+            $pushResult = [
                 'success_count' => 0,
                 'failure_count' => 0,
                 'results'       => [],
-                'message'       => 'Severity alert not sent.',
-                'first_error'   => null,
+                'message'       => 'Reporter notification not sent',
             ];
 
             try {
-                $severityAlertResult = $this->caseAlertService->sendSeverityWiseAlert($case);
+                $case->loadMissing('reporter');
+
+                if ($case->reporter) {
+                    $pushResult = $this->pushService->sendToUser(
+                        user: $case->reporter,
+                        title: 'Emergency Case Submitted',
+                        body: 'Your emergency report ' . $case->case_uid . ' has been submitted successfully.',
+                        data: [
+                            'type'      => 'emergency_case_created',
+                            'case_id'   => (string) $case->id,
+                            'case_uid'  => (string) $case->case_uid,
+                            'status'    => (string) $case->status,
+                            'case_type' => (string) $case->case_type,
+                            'severity'  => (string) $case->severity,
+                            'screen'    => 'EmergencyCaseDetails',
+                        ],
+                        imageUrl: null,
+                        platform: null,
+                        sound: 'default',
+                        androidChannelId: 'case_status_updates'
+                    );
+                }
             } catch (\Throwable $e) {
-                Log::error('Severity wise emergency alert failed', [
-                    'case_id'  => $case->id,
-                    'severity' => $case->severity,
-                    'error'    => $e->getMessage(),
-                    'line'     => $e->getLine(),
+                Log::error('Reporter Firebase notification failed', [
+                    'case_id' => $case->id,
+                    'user_id' => $case->reporter_id,
+                    'error'   => $e->getMessage(),
                 ]);
 
-                $severityAlertResult = [
+                $pushResult = [
                     'success_count' => 0,
                     'failure_count' => 1,
                     'results'       => [],
                     'message'       => $e->getMessage(),
-                    'first_error'   => $e->getMessage(),
+                ];
+            }
+
+            $locationAlertResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Location alert not sent',
+            ];
+
+            try {
+                $locationAlertResult = $this->caseAlertService->sendReportCreatedAlert($case);
+            } catch (\Throwable $e) {
+                Log::error('Report created location alert failed', [
+                    'case_id'  => $case->id,
+                    'severity' => $case->severity,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                $locationAlertResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
                 ];
             }
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Emergency case reported successfully.',
-
-                'data' => $case,
-
-                'media_count'       => $case->media->count(),
-                'media_saved_count' => $mediaSavedCount,
-                'upload_debug'      => $mediaResult['debug'],
-
-                'self_notification' => [
-                    'sent'          => ($selfPushResult['success_count'] ?? 0) > 0,
-                    'success_count' => $selfPushResult['success_count'] ?? 0,
-                    'failure_count' => $selfPushResult['failure_count'] ?? 0,
-                    'message'       => $selfPushResult['message'] ?? null,
-                    'first_error'   => $selfPushResult['first_error'] ?? null,
-                ],
-
-                'area_alert_notification' => [
-                    'sent'          => ($severityAlertResult['success_count'] ?? 0) > 0,
-                    'success_count' => $severityAlertResult['success_count'] ?? 0,
-                    'failure_count' => $severityAlertResult['failure_count'] ?? 0,
-                    'message'       => $severityAlertResult['message'] ?? null,
-                    'first_error'   => $severityAlertResult['first_error'] ?? null,
-                ],
-
-                'alerted_users' => $severityAlertResult['success_count'] ?? 0,
+                'status'                => true,
+                'message'               => 'Emergency case reported successfully.',
+                'data'                  => $case,
+                'media_count'           => $case->media->count(),
+                'media_saved_count'     => $mediaSavedCount,
+                'upload_debug'          => $mediaResult['debug'],
+                'reporter_push_result'  => $pushResult,
+                'location_alert_result' => $locationAlertResult,
+                'alerted_users'         => $locationAlertResult['success_count'] ?? 0,
             ], 201);
 
         } catch (\Throwable $e) {
@@ -480,76 +489,6 @@ class EmergencyCaseController extends Controller
         ];
     }
 
-    private function sendReporterCaseSubmittedNotification(EmergencyCase $case): array
-    {
-        $defaultResult = [
-            'success_count' => 0,
-            'failure_count' => 0,
-            'results'       => [],
-            'message'       => 'Reporter notification not sent.',
-            'first_error'   => null,
-        ];
-
-        try {
-            $case->loadMissing('reporter');
-
-            if (!$case->reporter) {
-                return array_merge($defaultResult, [
-                    'message' => 'Reporter user not found.',
-                ]);
-            }
-
-            return $this->pushService->sendToUser(
-                user: $case->reporter,
-                title: 'Emergency Case Submitted',
-                body: 'Your emergency report ' . $case->case_uid . ' has been submitted successfully.',
-                data: [
-                    'type'      => 'emergency_case_submitted_success',
-                    'case_id'   => (string) $case->id,
-                    'case_uid'  => (string) $case->case_uid,
-                    'status'    => (string) $case->status,
-                    'case_type' => (string) $case->case_type,
-                    'severity'  => (string) $case->severity,
-                    'screen'    => 'EmergencyCaseDetails',
-                    'latitude'  => (string) ($case->latitude ?? ''),
-                    'longitude' => (string) ($case->longitude ?? ''),
-                ],
-                imageUrl: null,
-                platform: null,
-
-                /*
-                |--------------------------------------------------------------------------
-                | Custom Sound
-                |--------------------------------------------------------------------------
-                | Android file:
-                | android/app/src/main/res/raw/gau_report_success.mp3
-                |
-                | iOS file:
-                | gau_report_success.caf
-                */
-                sound: 'gau_report_success',
-                androidChannelId: 'report_success_alerts'
-            );
-
-        } catch (\Throwable $e) {
-            Log::error('Reporter self notification failed', [
-                'case_id'     => $case->id,
-                'case_uid'    => $case->case_uid,
-                'reporter_id' => $case->reporter_id,
-                'error'       => $e->getMessage(),
-                'line'        => $e->getLine(),
-            ]);
-
-            return [
-                'success_count' => 0,
-                'failure_count' => 1,
-                'results'       => [],
-                'message'       => $e->getMessage(),
-                'first_error'   => $e->getMessage(),
-            ];
-        }
-    }
-
     public function acceptReport(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
@@ -777,8 +716,8 @@ class EmergencyCaseController extends Controller
             ];
 
             try {
-                $severityAcceptedAlertResult = $this->caseAlertService
-                    ->sendCaseAcceptedSeverityWiseAlert($case, $case->currentHandler);
+               $severityAcceptedAlertResult = $this->caseAlertService
+                ->sendCaseAcceptedAlert($case, $case->currentHandler);
             } catch (\Throwable $e) {
                 Log::error('Severity wise accepted case alert failed', [
                     'case_id'  => $case->id,
@@ -828,10 +767,11 @@ class EmergencyCaseController extends Controller
             ], 500);
         }
     }
-
+    
     public function rejectReport(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
+            'reason'    => 'nullable|string|max:1000',
             'notes'     => 'nullable|string|max:1000',
             'remarks'   => 'nullable|string|max:1000',
             'latitude'  => 'nullable|numeric|between:-90,90',
@@ -847,23 +787,25 @@ class EmergencyCaseController extends Controller
         }
 
         $userId = auth('sanctum')->id();
+        $reason = $request->reason ?? $request->notes ?? $request->remarks ?? 'Case rejected.';
 
         try {
-            $case = DB::transaction(function () use ($request, $id, $userId) {
+            $case = DB::transaction(function () use ($request, $id, $userId, $reason) {
                 $case = EmergencyCase::where('id', $id)
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if (in_array($case->status, ['resolved', 'closed', 'deleted'])) {
-                    abort(response()->json([
-                        'status'  => false,
-                        'message' => 'This case cannot be rejected now.',
-                    ], 422));
+                if (in_array($case->status, ['resolved', 'closed', 'cancelled', 'false_report', 'duplicate_case'])) {
+                    throw new HttpResponseException(
+                        response()->json([
+                            'status'  => false,
+                            'message' => 'This case cannot be rejected now.',
+                        ], 422)
+                    );
                 }
 
                 $oldStatus = $case->status;
                 $newStatus = $case->status;
-                $notes = $request->notes ?? $request->remarks ?? 'Case rejected.';
 
                 $assignment = EmergencyCaseAssignment::updateOrCreate(
                     [
@@ -875,14 +817,11 @@ class EmergencyCaseController extends Controller
                         'status'          => 'rejected',
                         'rejected_at'     => now(),
                         'accepted_at'     => null,
-                        'notes'           => $notes,
+                        'cancelled_at'    => null,
+                        'notes'           => $reason,
                     ]
                 );
 
-                /*
-                * If the current accepted handler rejects the case,
-                * release the case again so another responder can accept it.
-                */
                 if ($case->status === 'accepted' && (int) $case->current_handler_id === (int) $userId) {
                     $case->update([
                         'current_handler_id' => null,
@@ -893,11 +832,6 @@ class EmergencyCaseController extends Controller
                     $newStatus = 'alerted';
                 }
 
-                /*
-                * Optional escalation:
-                * If all assigned responders rejected and nobody accepted,
-                * mark the case as escalated.
-                */
                 $acceptedCount = EmergencyCaseAssignment::where('emergency_case_id', $case->id)
                     ->where('status', 'accepted')
                     ->count();
@@ -920,38 +854,124 @@ class EmergencyCaseController extends Controller
                     'action'            => 'case_rejected',
                     'old_status'        => $oldStatus,
                     'new_status'        => $newStatus,
-                    'notes'             => $notes,
+                    'notes'             => $reason,
                     'latitude'          => $request->latitude,
                     'longitude'         => $request->longitude,
                     'meta'              => [
                         'assignment_id' => $assignment->id,
+                        'reason'        => $reason,
                     ],
                 ]);
 
                 return $case;
             });
 
-            return response()->json([
-                'status'  => true,
-                'message' => 'Case rejected successfully.',
-                'data'    => $case->fresh([
-                    'animalType',
-                    'reportType',
-                    'animalCondition',
-                    'media',
-                    'assignments.user:id,name,mobile',
-                    'currentHandler:id,name,mobile',
-                ]),
+            $case = $case->fresh([
+                'animalType',
+                'reportType',
+                'animalCondition',
+                'media',
+                'assignments.user:id,name,mobile',
+                'currentHandler:id,name,mobile',
+                'reporter:id,name,mobile',
             ]);
-        } catch (\Throwable $e) {
-            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
-                throw $e;
+
+            $rejectedByUser = auth('sanctum')->user();
+
+            $reporterPushResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Reporter notification not sent',
+            ];
+
+            try {
+                if ($case->reporter) {
+                    $reporterPushResult = $this->pushService->sendToUser(
+                        user: $case->reporter,
+                        title: 'Emergency Case Rejected',
+                        body: ($rejectedByUser?->name ?? 'A responder') . ' rejected your emergency case ' . $case->case_uid . '. Reason: ' . $reason,
+                        data: [
+                            'type'      => 'emergency_case_rejected',
+                            'case_id'   => (string) $case->id,
+                            'case_uid'  => (string) $case->case_uid,
+                            'status'    => (string) $case->status,
+                            'case_type' => (string) $case->case_type,
+                            'severity'  => (string) $case->severity,
+                            'reason'    => (string) $reason,
+                            'screen'    => 'EmergencyCaseDetails',
+                        ],
+                        imageUrl: null,
+                        platform: null,
+                        sound: 'default',
+                        androidChannelId: 'case_status_updates'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::error('Reporter rejected case notification failed', [
+                    'case_id' => $case->id,
+                    'user_id' => $case->reporter_id,
+                    'error'   => $e->getMessage(),
+                ]);
+
+                $reporterPushResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
             }
+
+            $locationAlertResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Rejected location alert not sent',
+            ];
+
+            try {
+                $locationAlertResult = $this->caseAlertService
+                    ->sendCaseRejectedAlert($case, $rejectedByUser, $reason);
+            } catch (\Throwable $e) {
+                Log::error('Case rejected location alert failed', [
+                    'case_id'  => $case->id,
+                    'severity' => $case->severity,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                $locationAlertResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
+            }
+
+            return response()->json([
+                'status'                => true,
+                'message'               => 'Case rejected successfully.',
+                'data'                  => $case,
+                'reason'                => $reason,
+                'reporter_push_result'  => $reporterPushResult,
+                'location_alert_result' => $locationAlertResult,
+                'alerted_users'         => $locationAlertResult['success_count'] ?? 0,
+            ]);
+        } catch (HttpResponseException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('Reject report failed', [
+                'case_id' => $id,
+                'user_id' => $userId,
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ]);
 
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong while rejecting the case.',
                 'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
             ], 500);
         }
     }
@@ -1017,6 +1037,57 @@ class EmergencyCaseController extends Controller
             'meta'              => null,
         ]);
 
+        $case = $case->fresh([
+            'animalType',
+            'reportType',
+            'animalCondition',
+            'media',
+            'assignments.user:id,name,mobile',
+            'currentHandler:id,name,mobile',
+            'reporter:id,name,mobile',
+        ]);
+
+        $statusAlertResult = [
+            'success_count' => 0,
+            'failure_count' => 0,
+            'results'       => [],
+            'message'       => 'Status location alert not sent',
+        ];
+
+        try {
+            if (in_array($newStatus, ['en_route', 'reached_site', 'rescue_in_progress', 'resolved'])) {
+                $statusAlertResult = $this->caseAlertService
+                    ->sendCaseStatusChangedAlert($case, auth('sanctum')->user(), $request->notes ?? $request->remarks);
+            }
+
+            if (in_array($newStatus, ['closed', 'cancelled', 'false_report', 'unable_to_locate'])) {
+                $statusAlertResult = $this->caseAlertService
+                    ->sendCaseClosedAlert($case, auth('sanctum')->user(), $request->notes ?? $request->remarks);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Status changed location alert failed', [
+                'case_id'  => $case->id,
+                'status'   => $newStatus,
+                'severity' => $case->severity,
+                'error'    => $e->getMessage(),
+            ]);
+
+            $statusAlertResult = [
+                'success_count' => 0,
+                'failure_count' => 1,
+                'results'       => [],
+                'message'       => $e->getMessage(),
+            ];
+        }
+
+        return response()->json([
+            'status'              => true,
+            'message'             => 'Case status updated successfully.',
+            'data'                => $case,
+            'status_alert_result' => $statusAlertResult,
+            'alerted_users'       => $statusAlertResult['success_count'] ?? 0,
+        ]);
+
         return response()->json([
             'status'  => true,
             'message' => 'Case status updated successfully.',
@@ -1028,12 +1099,13 @@ class EmergencyCaseController extends Controller
             ]),
         ]);
     }
-
+        
     public function closeReport(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'resolution_notes'    => ['nullable', 'string'],
-            'false_report_reason' => ['nullable', 'string'],
+            'resolution_notes'    => ['nullable', 'string', 'max:2000'],
+            'false_report_reason' => ['nullable', 'string', 'max:2000'],
+            'reason'              => ['nullable', 'string', 'max:2000'],
             'status'              => ['nullable', Rule::in(['closed', 'resolved', 'false_report', 'unable_to_locate', 'cancelled'])],
             'latitude'            => ['nullable', 'numeric', 'between:-90,90'],
             'longitude'           => ['nullable', 'numeric', 'between:-180,180'],
@@ -1047,41 +1119,155 @@ class EmergencyCaseController extends Controller
             ], 422);
         }
 
-        $case = EmergencyCase::findOrFail($id);
-        $oldStatus = $case->status;
+        $userId = auth('sanctum')->id();
+
         $newStatus = $request->status ?? 'closed';
 
-        $case->update([
-            'status'              => $newStatus,
-            'closed_by'           => auth('sanctum')->id(),
-            'closed_at'           => now(),
-            'resolved_at'         => in_array($newStatus, ['closed', 'resolved']) ? now() : $case->resolved_at,
-            'resolution_notes'    => $request->resolution_notes,
-            'false_report_reason' => $request->false_report_reason,
-        ]);
+        $reason = $request->reason
+            ?? $request->resolution_notes
+            ?? $request->false_report_reason
+            ?? 'Case closed.';
 
-        EmergencyCaseLog::create([
-            'emergency_case_id' => $case->id,
-            'user_id'           => auth('sanctum')->id(),
-            'action'            => 'case_closed',
-            'old_status'        => $oldStatus,
-            'new_status'        => $newStatus,
-            'notes'             => $request->resolution_notes ?? $request->false_report_reason,
-            'latitude'          => $request->latitude,
-            'longitude'         => $request->longitude,
-            'meta'              => null,
-        ]);
+        try {
+            $case = DB::transaction(function () use ($request, $id, $userId, $newStatus, $reason) {
+                $case = EmergencyCase::where('id', $id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Case closed successfully.',
-            'data'    => $case->fresh([
+                $oldStatus = $case->status;
+
+                $case->update([
+                    'status'              => $newStatus,
+                    'closed_by'           => $userId,
+                    'closed_at'           => now(),
+                    'resolved_at'         => in_array($newStatus, ['closed', 'resolved']) ? now() : $case->resolved_at,
+                    'resolution_notes'    => $request->resolution_notes ?? $reason,
+                    'false_report_reason' => $request->false_report_reason,
+                ]);
+
+                EmergencyCaseLog::create([
+                    'emergency_case_id' => $case->id,
+                    'user_id'           => $userId,
+                    'action'            => 'case_closed',
+                    'old_status'        => $oldStatus,
+                    'new_status'        => $newStatus,
+                    'notes'             => $reason,
+                    'latitude'          => $request->latitude,
+                    'longitude'         => $request->longitude,
+                    'meta'              => [
+                        'reason' => $reason,
+                    ],
+                ]);
+
+                return $case;
+            });
+
+            $case = $case->fresh([
                 'animalType',
                 'reportType',
                 'animalCondition',
                 'media',
-            ]),
-        ]);
+                'assignments.user:id,name,mobile',
+                'currentHandler:id,name,mobile',
+                'reporter:id,name,mobile',
+            ]);
+
+            $closedByUser = auth('sanctum')->user();
+
+            $reporterPushResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Reporter notification not sent',
+            ];
+
+            try {
+                if ($case->reporter) {
+                    $reporterPushResult = $this->pushService->sendToUser(
+                        user: $case->reporter,
+                        title: 'Emergency Case Closed',
+                        body: 'Your emergency case ' . $case->case_uid . ' has been closed. Reason: ' . $reason,
+                        data: [
+                            'type'      => 'emergency_case_closed',
+                            'case_id'   => (string) $case->id,
+                            'case_uid'  => (string) $case->case_uid,
+                            'status'    => (string) $case->status,
+                            'case_type' => (string) $case->case_type,
+                            'severity'  => (string) $case->severity,
+                            'reason'    => (string) $reason,
+                            'screen'    => 'EmergencyCaseDetails',
+                        ],
+                        imageUrl: null,
+                        platform: null,
+                        sound: 'default',
+                        androidChannelId: 'case_status_updates'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::error('Reporter closed case notification failed', [
+                    'case_id' => $case->id,
+                    'user_id' => $case->reporter_id,
+                    'error'   => $e->getMessage(),
+                ]);
+
+                $reporterPushResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
+            }
+
+            $locationAlertResult = [
+                'success_count' => 0,
+                'failure_count' => 0,
+                'results'       => [],
+                'message'       => 'Closed location alert not sent',
+            ];
+
+            try {
+                $locationAlertResult = $this->caseAlertService
+                    ->sendCaseClosedAlert($case, $closedByUser, $reason);
+            } catch (\Throwable $e) {
+                Log::error('Case closed location alert failed', [
+                    'case_id'  => $case->id,
+                    'severity' => $case->severity,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                $locationAlertResult = [
+                    'success_count' => 0,
+                    'failure_count' => 1,
+                    'results'       => [],
+                    'message'       => $e->getMessage(),
+                ];
+            }
+
+            return response()->json([
+                'status'                => true,
+                'message'               => 'Case closed successfully.',
+                'data'                  => $case,
+                'reason'                => $reason,
+                'reporter_push_result'  => $reporterPushResult,
+                'location_alert_result' => $locationAlertResult,
+                'alerted_users'         => $locationAlertResult['success_count'] ?? 0,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Close report failed', [
+                'case_id' => $id,
+                'user_id' => $userId,
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while closing the case.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+                'line'    => config('app.debug') ? $e->getLine() : null,
+            ], 500);
+        }
     }
 
     private function generateCaseUid(): string
@@ -1092,7 +1278,6 @@ class EmergencyCaseController extends Controller
 
         return $uid;
     }
-
 
 
 }
