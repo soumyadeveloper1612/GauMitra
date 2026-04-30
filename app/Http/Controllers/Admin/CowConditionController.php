@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\CowCondition;
+use App\Models\AnimalCondition;
 use App\Models\ReportType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -13,7 +13,7 @@ class CowConditionController extends Controller
 {
     public function index()
     {
-        $cowConditions = CowCondition::with('reportType')
+        $cowConditions = AnimalCondition::with('reportType')
             ->notDeleted()
             ->ordered()
             ->get();
@@ -49,7 +49,7 @@ class CowConditionController extends Controller
             'status'          => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
-        CowCondition::create([
+        AnimalCondition::create([
             'report_type_id'  => $validated['report_type_id'] ?? null,
             'name'            => $validated['name'],
             'slug'            => $this->generateUniqueSlug($validated['name']),
@@ -70,7 +70,7 @@ class CowConditionController extends Controller
 
     public function update(Request $request, $id)
     {
-        $cowCondition = CowCondition::findOrFail($id);
+        $cowCondition = AnimalCondition::findOrFail($id);
 
         $validated = $request->validate([
             'report_type_id'  => ['nullable', 'exists:report_types,id'],
@@ -106,7 +106,7 @@ class CowConditionController extends Controller
 
     public function destroy($id)
     {
-        $cowCondition = CowCondition::findOrFail($id);
+        $cowCondition = AnimalCondition::findOrFail($id);
 
         $cowCondition->update([
             'status' => 'deleted',
@@ -124,7 +124,7 @@ class CowConditionController extends Controller
         $counter = 1;
 
         while (
-            CowCondition::where('slug', $slug)
+            AnimalCondition::where('slug', $slug)
                 ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
                 ->exists()
         ) {
