@@ -38,4 +38,12 @@ class UserAddress extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function scopeActiveAddress($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('status')
+                ->orWhere('status', 'active');
+        });
+    }
 }

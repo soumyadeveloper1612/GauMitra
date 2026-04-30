@@ -65,4 +65,13 @@ class User extends Authenticatable
         return $this->hasMany(DeviceToken::class, 'user_id');
     }
 
+    public function activeAddresses()
+    {
+        return $this->hasMany(UserAddress::class, 'user_id')
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhere('status', 'active');
+            });
+    }
+
 }

@@ -10,6 +10,7 @@ use App\Models\EmergencyCaseLog;
 use App\Models\EmergencyCaseMedia;
 use App\Models\EmergencyCaseAssignment;
 use App\Models\ReportType;
+use App\Models\UserAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -1338,99 +1339,162 @@ class EmergencyCaseController extends Controller
         ]);
     }
 
-    public function addressWiseCases(Request $request)
+    public function myAddressWiseEmergencyCases(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'area_name' => 'nullable|string|max:191',
-            'city'      => 'nullable|string|max:191',
-            'district'  => 'nullable|string|max:191',
-            'state'     => 'nullable|string|max:191',
-            'pincode'   => 'nullable|string|max:20',
-            'per_page'  => 'nullable|integer|min:1|max:50',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Validation failed.',
-                'errors'  => $validator->errors(),
-            ], 422);
-        }
-
-        if (
-            !$request->filled('area_name') &&
-            !$request->filled('city') &&
-            !$request->filled('district') &&
-            !$request->filled('state') &&
-            !$request->filled('pincode')
-        ) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Please send at least one address field: area_name, city, district, state, or pincode.',
-            ], 422);
-        }
+        $user = $request->user();
 
         $perPage = (int) $request->input('per_page', 10);
         $perPage = $perPage > 50 ? 50 : $perPage;
 
+        /*
+        |--------------------------------------------------------------------------
+        | Get user's address automatically
+        |--------------------------------------------------------------------------
+        | If address_id is passed, fetch that address.
+        | Otherwise fetch latest active address.
+        */
+        $addressQuery = $user->addresses()
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhere('status', 'active');
+            });
+
+        if ($request->filled('address_id')) {
+            $addressQuery->where('id', $request->address_id);
+        }
+
+        $address = $addressQuery->latest('id')->first();
+
+        if (!$address) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'No active address found for this user. Please add your address first.',
+                'data'    => [],
+            ], 404);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Fetch open emergency cases matching user's saved address
+        |--------------------------------------------------------------------------
+        */
         $query = EmergencyCase::query()
-            ->notClosed()
+            ->notClosedOrCancelled()
             ->with([
                 'animalType:id,name,slug',
                 'reportType:id,name,slug',
                 'animalCondition:id,name,severity_level,color_code',
+                'reporter:id,name,mobile,profile_photo',
+                'currentHandler:id,name,mobile,profile_photo',
                 'media',
                 'photos',
                 'videos',
-                'assignments.user:id,name,profile_photo',
-                'acceptedAssignments.user:id,name,profile_photo',
+                'assignments.user:id,name,mobile,profile_photo',
+                'acceptedAssignments.user:id,name,mobile,profile_photo',
+                'logs',
             ])
             ->withCount([
                 'media',
                 'photos',
                 'videos',
                 'assignments',
+                'acceptedAssignments',
+                'logs',
             ])
             ->latest();
 
-        $this->applyAddressFilter($query, $request);
+        $this->applyUserAddressFilter($query, $address);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
+        if ($request->filled('case_type')) {
+            $query->where('case_type', $request->case_type);
+        }
 
         $cases = $query->paginate($perPage);
 
         $cases->getCollection()->transform(function ($case) {
-            return $this->formatEmergencyCase($case, false, false);
+            return $this->formatAddressWiseEmergencyCase($case);
         });
 
         return response()->json([
             'status'  => true,
-            'message' => 'Address-wise emergency cases fetched successfully.',
-            'data'    => $cases,
+            'message' => 'My address-wise emergency cases fetched successfully.',
+            'user_address_used' => [
+                'id'           => $address->id,
+                'full_address' => $address->full_address,
+                'area_name'    => $address->area_name,
+                'city'         => $address->city,
+                'district'     => $address->district,
+                'state'        => $address->state,
+                'pincode'      => $address->pincode,
+                'latitude'     => $address->latitude,
+                'longitude'    => $address->longitude,
+            ],
+            'data' => $cases,
         ]);
     }
 
-    private function applyAddressFilter($query, Request $request)
+    private function applyUserAddressFilter($query, UserAddress $address)
     {
-        $fields = [
-            'area_name',
-            'city',
-            'district',
-            'state',
-        ];
+        /*
+        |--------------------------------------------------------------------------
+        | Matching logic
+        |--------------------------------------------------------------------------
+        | Priority:
+        | 1. area_name + city + district + state
+        | 2. city + district + state
+        | 3. district + state
+        | 4. pincode fallback
+        */
 
-        foreach ($fields as $field) {
-            if ($request->filled($field)) {
-                $value = Str::lower(trim($request->input($field)));
+        $hasArea     = !empty($address->area_name);
+        $hasCity     = !empty($address->city);
+        $hasDistrict = !empty($address->district);
+        $hasState    = !empty($address->state);
+        $hasPincode  = !empty($address->pincode);
 
-                $query->whereRaw("LOWER(TRIM({$field})) = ?", [$value]);
-            }
+        if ($hasArea) {
+            $query->whereRaw('LOWER(TRIM(area_name)) = ?', [
+                strtolower(trim($address->area_name))
+            ]);
         }
 
-        if ($request->filled('pincode')) {
-            $query->where('pincode', trim($request->pincode));
+        if ($hasCity) {
+            $query->whereRaw('LOWER(TRIM(city)) = ?', [
+                strtolower(trim($address->city))
+            ]);
+        }
+
+        if ($hasDistrict) {
+            $query->whereRaw('LOWER(TRIM(district)) = ?', [
+                strtolower(trim($address->district))
+            ]);
+        }
+
+        if ($hasState) {
+            $query->whereRaw('LOWER(TRIM(state)) = ?', [
+                strtolower(trim($address->state))
+            ]);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | If area/city/district/state are missing, use pincode fallback
+        |--------------------------------------------------------------------------
+        */
+        if (!$hasArea && !$hasCity && !$hasDistrict && !$hasState && $hasPincode) {
+            $query->where('pincode', trim($address->pincode));
         }
     }
 
-    private function formatEmergencyCase($case, bool $includeReporter = false, bool $includeSensitive = false)
+    private function formatAddressWiseEmergencyCase($case)
     {
         return [
             'id'                 => $case->id,
@@ -1440,10 +1504,6 @@ class EmergencyCaseController extends Controller
             'description'        => $case->description,
             'severity'           => $case->severity,
             'cattle_count'       => $case->cattle_count,
-
-            'contact_number'     => $includeSensitive ? $case->contact_number : null,
-            'vehicle_number'     => $includeSensitive ? $case->vehicle_number : null,
-            'vehicle_details'    => $includeSensitive ? $case->vehicle_details : null,
 
             'full_address'       => $case->full_address,
             'area_name'          => $case->area_name,
@@ -1468,9 +1528,6 @@ class EmergencyCaseController extends Controller
             'resolved_at'        => optional($case->resolved_at)->format('Y-m-d H:i:s'),
             'closed_at'          => optional($case->closed_at)->format('Y-m-d H:i:s'),
 
-            'resolution_notes'   => $includeSensitive ? $case->resolution_notes : null,
-            'false_report_reason'=> $includeSensitive ? $case->false_report_reason : null,
-
             'animal_type' => $case->animalType ? [
                 'id'   => $case->animalType->id,
                 'name' => $case->animalType->name,
@@ -1490,21 +1547,19 @@ class EmergencyCaseController extends Controller
                 'color_code'     => $case->animalCondition->color_code ?? null,
             ] : null,
 
-            'reporter' => $includeReporter && $case->reporter ? [
+            'reporter' => $case->reporter ? [
                 'id'            => $case->reporter->id,
                 'name'          => $case->reporter->name,
-                'mobile'        => $case->reporter->mobile,
                 'profile_photo' => $case->reporter->profile_photo,
             ] : null,
 
             'current_handler' => $case->currentHandler ? [
                 'id'            => $case->currentHandler->id,
                 'name'          => $case->currentHandler->name,
-                'mobile'        => $includeSensitive ? $case->currentHandler->mobile : null,
                 'profile_photo' => $case->currentHandler->profile_photo,
             ] : null,
 
-            'accepted_user_list' => $case->acceptedAssignments ? $case->acceptedAssignments->map(function ($assignment) use ($includeSensitive) {
+            'accepted_user_list' => $case->acceptedAssignments ? $case->acceptedAssignments->map(function ($assignment) {
                 return [
                     'assignment_id'   => $assignment->id,
                     'assignment_role' => $assignment->assignment_role,
@@ -1519,28 +1574,6 @@ class EmergencyCaseController extends Controller
                     'user'            => $assignment->user ? [
                         'id'            => $assignment->user->id,
                         'name'          => $assignment->user->name,
-                        'mobile'        => $includeSensitive ? $assignment->user->mobile : null,
-                        'profile_photo' => $assignment->user->profile_photo,
-                    ] : null,
-                ];
-            })->values() : [],
-
-            'all_assignment_list' => $case->assignments ? $case->assignments->map(function ($assignment) use ($includeSensitive) {
-                return [
-                    'assignment_id'   => $assignment->id,
-                    'assignment_role' => $assignment->assignment_role,
-                    'status'          => $assignment->status,
-                    'distance_km'     => $assignment->distance_km,
-                    'accepted_at'     => optional($assignment->accepted_at)->format('Y-m-d H:i:s'),
-                    'rejected_at'     => optional($assignment->rejected_at)->format('Y-m-d H:i:s'),
-                    'reached_at'      => optional($assignment->reached_at)->format('Y-m-d H:i:s'),
-                    'completed_at'    => optional($assignment->completed_at)->format('Y-m-d H:i:s'),
-                    'cancelled_at'    => optional($assignment->cancelled_at)->format('Y-m-d H:i:s'),
-                    'notes'           => $assignment->notes,
-                    'user'            => $assignment->user ? [
-                        'id'            => $assignment->user->id,
-                        'name'          => $assignment->user->name,
-                        'mobile'        => $includeSensitive ? $assignment->user->mobile : null,
                         'profile_photo' => $assignment->user->profile_photo,
                     ] : null,
                 ];
@@ -1560,12 +1593,12 @@ class EmergencyCaseController extends Controller
             })->values() : [],
 
             'counts' => [
-                'media_count'       => $case->media_count ?? 0,
-                'photos_count'      => $case->photos_count ?? 0,
-                'videos_count'      => $case->videos_count ?? 0,
-                'logs_count'        => $case->logs_count ?? 0,
-                'assignments_count' => $case->assignments_count ?? 0,
-                'alerts_count'      => $case->alerts_count ?? 0,
+                'media_count'                => $case->media_count ?? 0,
+                'photos_count'               => $case->photos_count ?? 0,
+                'videos_count'               => $case->videos_count ?? 0,
+                'assignments_count'          => $case->assignments_count ?? 0,
+                'accepted_assignments_count' => $case->accepted_assignments_count ?? 0,
+                'logs_count'                 => $case->logs_count ?? 0,
             ],
 
             'created_at' => optional($case->created_at)->format('Y-m-d H:i:s'),

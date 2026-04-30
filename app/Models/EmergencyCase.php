@@ -163,15 +163,16 @@ class EmergencyCase extends Model
     }
 
     public function acceptedAssignments()
-    {
-        return $this->hasMany(EmergencyCaseAssignment::class, 'emergency_case_id')
-            ->whereIn('status', [
-                'accepted',
-                'en_route',
-                'reached',
-                'completed',
-            ]);
-    }
+{
+    return $this->hasMany(EmergencyCaseAssignment::class, 'emergency_case_id')
+        ->whereIn('status', [
+            'accepted',
+            'en_route',
+            'reached',
+            'reached_site',
+            'completed',
+        ]);
+}
 
     public function scopeNotClosed($query)
     {
@@ -181,5 +182,17 @@ class EmergencyCase extends Model
         });
     }
 
-    
+    public function scopeNotClosedOrCancelled($query)
+    {
+        return $query->whereNotIn('status', [
+            'resolved',
+            'closed',
+            'cancelled',
+            'false_report',
+            'duplicate_case',
+            'unable_to_locate',
+        ]);
+    }
+
+
 }
